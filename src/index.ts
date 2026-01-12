@@ -21,7 +21,10 @@ import {
   healthCheckTool, healthCheckSchema, handleHealthCheck,
   webSearchTool, webSearchSchema, handleWebSearch,
   libraryDocsTool, libraryDocsSchema, handleLibraryDocs,
-  searchLibrariesTool, searchLibrariesSchema, handleSearchLibraries
+  searchLibrariesTool, searchLibrariesSchema, handleSearchLibraries,
+  authStatusTool, authStatusSchema, handleAuthStatus,
+  authGptTool, authClaudeTool, authGeminiTool, authProviderSchema,
+  handleAuthGpt, handleAuthClaude, handleAuthGemini
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -123,7 +126,35 @@ function registerTools() {
     (args) => handleSearchLibraries(searchLibrariesSchema.parse(args))
   );
 
-  logger.info('All tools registered (13 tools)');
+  // 14. auth_status
+  server.tool(
+    authStatusTool.name,
+    authStatusSchema.shape,
+    () => handleAuthStatus()
+  );
+
+  // 15. auth_gpt
+  server.tool(
+    authGptTool.name,
+    authProviderSchema.shape,
+    () => handleAuthGpt()
+  );
+
+  // 16. auth_claude
+  server.tool(
+    authClaudeTool.name,
+    authProviderSchema.shape,
+    () => handleAuthClaude()
+  );
+
+  // 17. auth_gemini
+  server.tool(
+    authGeminiTool.name,
+    authProviderSchema.shape,
+    () => handleAuthGemini()
+  );
+
+  logger.info('All tools registered (17 tools)');
 }
 
 // 메인 함수
