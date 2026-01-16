@@ -38,6 +38,9 @@ import {
   hookStatusTool, hookStatusSchema, handleHookStatus,
   hookToggleTool, hookToggleSchema, handleHookToggle,
   hookSystemToggleTool, hookSystemToggleSchema, handleHookSystemToggle,
+  externalHookAddTool, externalHookAddSchema, handleExternalHookAdd,
+  externalHookRemoveTool, externalHookRemoveSchema, handleExternalHookRemove,
+  externalHookListTool, externalHookListSchema, handleExternalHookList,
   boulderStatusTool, boulderStatusSchema, handleBoulderStatus,
   boulderRecoverTool, boulderRecoverSchema, handleBoulderRecover,
   boulderDetailTool, boulderDetailSchema, handleBoulderDetail
@@ -268,7 +271,28 @@ function registerTools() {
     (args) => handleBoulderDetail(boulderDetailSchema.parse(args))
   );
 
-  logger.info('All tools registered (31 tools)');
+  // 32. external_hook_add
+  server.tool(
+    externalHookAddTool.name,
+    externalHookAddSchema.shape,
+    (args) => handleExternalHookAdd(externalHookAddSchema.parse(args))
+  );
+
+  // 33. external_hook_remove
+  server.tool(
+    externalHookRemoveTool.name,
+    externalHookRemoveSchema.shape,
+    (args) => handleExternalHookRemove(externalHookRemoveSchema.parse(args))
+  );
+
+  // 34. external_hook_list
+  server.tool(
+    externalHookListTool.name,
+    externalHookListSchema.shape,
+    (args) => handleExternalHookList(externalHookListSchema.parse(args))
+  );
+
+  logger.info('All tools registered (34 tools)');
 }
 
 // 메인 함수

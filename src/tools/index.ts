@@ -37,7 +37,10 @@ export {
 export {
   hookStatusTool, hookStatusSchema, handleHookStatus,
   hookToggleTool, hookToggleSchema, handleHookToggle,
-  hookSystemToggleTool, hookSystemToggleSchema, handleHookSystemToggle
+  hookSystemToggleTool, hookSystemToggleSchema, handleHookSystemToggle,
+  externalHookAddTool, externalHookAddSchema, handleExternalHookAdd,
+  externalHookRemoveTool, externalHookRemoveSchema, handleExternalHookRemove,
+  externalHookListTool, externalHookListSchema, handleExternalHookList
 } from './hook-manager.js';
 export {
   boulderStatusTool, boulderStatusSchema, handleBoulderStatus,

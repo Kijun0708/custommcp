@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0",
+  "enabled": true,
+  "hooks": {
+    "onExpertCall": [
+      {
+        "id": "builtin_log_expert_call",
+        "enabled": true,
+        "priority": "normal"
+      }
+    ],
+    "onError": [
+      {
+        "id": "builtin_track_error",
+        "enabled": true,
+        "priority": "high"
+      }
+    ]
+  },
+  "externalHooks": {
+    "onWorkflowEnd": [
+      {
+        "name": "Workflow Notification",
+        "command": "echo \"Workflow completed: $(echo $HOOK_CONTEXT | jq -r '.success')\"",
+        "timeoutMs": 5000,
+        "priority": "low"
+      }
+    ],
+    "onError": [
+      {
+        "name": "Error Logger",
+        "command": "echo \"[$(date)] Error: $(echo $HOOK_CONTEXT | jq -r '.errorMessage')\" >> .llm-router/errors.log",
+        "timeoutMs": 3000,
+        "priority": "normal"
+      }
+    ],
+    "onExpertCall": [
+      {
+        "name": "Expert Call Monitor",
+        "command": "echo \"Expert $(echo $HOOK_CONTEXT | jq -r '.expertId') called at $(date)\" >> .llm-router/expert-calls.log",
+        "timeoutMs": 3000,
+        "pattern": "strategist|researcher",
+        "priority": "low"
+      }
+    ]
+  },
+  "disabledHooks": []
+}
