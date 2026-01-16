@@ -35,3 +35,6 @@ vendor/cliproxy/tmpclaude-*
 
 # Release builds (use GitHub Releases instead)
 release/
+
+# LLM Router runtime data
+.llm-router/
