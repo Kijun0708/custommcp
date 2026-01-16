@@ -121,5 +121,6 @@ export interface Config {
     frontend: string;
     writer: string;
     explorer: string;
+    multimodal: string;
   };
 }

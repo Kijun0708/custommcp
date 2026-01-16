@@ -50,6 +50,14 @@ export {
   type DocumentationType,
 } from './writer.prompt.js';
 
+// Multimodal Looker (Visual Analysis)
+export {
+  MULTIMODAL_SYSTEM_PROMPT,
+  MULTIMODAL_METADATA,
+  buildMultimodalPrompt,
+  type MultimodalDepth,
+} from './multimodal.prompt.js';
+
 // Import for internal use
 import { STRATEGIST_SYSTEM_PROMPT, STRATEGIST_METADATA } from './strategist.prompt.js';
 import { RESEARCHER_SYSTEM_PROMPT, RESEARCHER_METADATA } from './researcher.prompt.js';
@@ -57,6 +65,7 @@ import { EXPLORER_SYSTEM_PROMPT, EXPLORER_METADATA } from './explorer.prompt.js'
 import { FRONTEND_SYSTEM_PROMPT, FRONTEND_METADATA } from './frontend.prompt.js';
 import { REVIEWER_SYSTEM_PROMPT, REVIEWER_METADATA } from './reviewer.prompt.js';
 import { WRITER_SYSTEM_PROMPT, WRITER_METADATA } from './writer.prompt.js';
+import { MULTIMODAL_SYSTEM_PROMPT, MULTIMODAL_METADATA } from './multimodal.prompt.js';
 import type { ExpertRegistry } from '../metadata/expert-metadata.js';
 
 /**
@@ -69,6 +78,7 @@ export const EXPERT_REGISTRY: ExpertRegistry = {
   frontend: FRONTEND_METADATA,
   reviewer: REVIEWER_METADATA,
   writer: WRITER_METADATA,
+  multimodal: MULTIMODAL_METADATA,
 };
 
 /**
@@ -81,6 +91,7 @@ export const EXPERT_PROMPTS: Record<string, string> = {
   frontend: FRONTEND_SYSTEM_PROMPT,
   reviewer: REVIEWER_SYSTEM_PROMPT,
   writer: WRITER_SYSTEM_PROMPT,
+  multimodal: MULTIMODAL_SYSTEM_PROMPT,
 };
 
 /**

@@ -56,7 +56,8 @@ export function loadConfig(overridePort?: number): Config {
       reviewer: process.env.MODEL_REVIEWER || 'gemini-2.5-pro',
       frontend: process.env.MODEL_FRONTEND || 'gemini-2.5-pro',
       writer: process.env.MODEL_WRITER || 'gemini-2.5-flash',
-      explorer: process.env.MODEL_EXPLORER || 'gemini-2.5-flash'
+      explorer: process.env.MODEL_EXPLORER || 'gemini-2.5-flash',
+      multimodal: process.env.MODEL_MULTIMODAL || 'gemini-2.5-pro'  // Multimodal analysis
     }
   };
 }

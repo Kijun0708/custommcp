@@ -4,7 +4,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { experts } from "../experts/index.js";
 
-const expertIds = ["strategist", "researcher", "reviewer", "frontend", "writer", "explorer"] as const;
+const expertIds = ["strategist", "researcher", "reviewer", "frontend", "writer", "explorer", "multimodal"] as const;
 
 export const setExpertModelSchema = z.object({
   expert: z.enum(expertIds)
@@ -29,6 +29,7 @@ export const setExpertModelTool = {
 - frontend: UI/UX/컴포넌트 (기본: gemini-2.5-pro)
 - writer: 문서작성 (기본: gemini-2.5-flash)
 - explorer: 빠른검색 (기본: gemini-2.5-flash)
+- multimodal: 이미지/시각분석 (기본: gemini-2.5-pro)
 
 ## 사용 예시
 - expert: "strategist", model: "gpt-4o"

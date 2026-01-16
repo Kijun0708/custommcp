@@ -264,7 +264,7 @@ async function handleRalphLoopMode(
     const result = await manager.execute(taskId, request, {
       maxIterations,
       completionPromise,
-      expert: expert as 'strategist' | 'researcher' | 'reviewer' | 'frontend' | 'writer' | 'explorer',
+      expert: expert as 'strategist' | 'researcher' | 'reviewer' | 'frontend' | 'writer' | 'explorer' | 'multimodal',
       context
     });
 

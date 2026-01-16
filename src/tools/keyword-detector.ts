@@ -17,7 +17,7 @@ import {
 // Tool Schemas
 // ============================================================================
 
-const expertIdEnum = z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer']);
+const expertIdEnum = z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer', 'multimodal']);
 const matchTypeEnum = z.enum(['exact', 'contains', 'startsWith', 'endsWith', 'regex']);
 
 export const keywordAddSchema = z.object({

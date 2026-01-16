@@ -6,7 +6,7 @@ import { callExpertWithFallback, callExpertWithToolsAndFallback } from "../servi
 import { sessionMemory } from "../services/session-memory.js";
 
 export const consultExpertSchema = z.object({
-  expert: z.enum(["strategist", "researcher", "reviewer", "frontend", "writer", "explorer"])
+  expert: z.enum(["strategist", "researcher", "reviewer", "frontend", "writer", "explorer", "multimodal"])
     .describe("자문할 전문가"),
 
   question: z.string()
@@ -62,6 +62,10 @@ export const consultExpertTool = {
 ### explorer (Gemini 3.0 Flash)
 - 역할: 빠른 코드베이스 탐색, 패턴 매칭, 간단한 질문
 - 사용 시점: 파일 찾기, 빠른 답변, 구조 파악
+
+### multimodal (Gemini 2.5 Pro)
+- 역할: 이미지/시각적 콘텐츠 분석, 스크린샷 해석, 다이어그램 이해
+- 사용 시점: 스크린샷 분석, UI 목업 리뷰, 다이어그램 해석, 에러 메시지 이미지 읽기
 
 ## Rate Limit 자동 처리
 - 전문가가 한도 초과 시 자동으로 대체 전문가로 폴백

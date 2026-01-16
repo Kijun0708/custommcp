@@ -11,7 +11,7 @@ import {
 
 // 백그라운드 시작
 export const backgroundStartSchema = z.object({
-  expert: z.enum(["strategist", "researcher", "reviewer", "frontend", "writer", "explorer"])
+  expert: z.enum(["strategist", "researcher", "reviewer", "frontend", "writer", "explorer", "multimodal"])
     .describe("실행할 전문가"),
 
   prompt: z.string()

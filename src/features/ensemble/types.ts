@@ -247,5 +247,6 @@ export const EXPERT_PROVIDERS: Record<string, string> = {
   reviewer: 'Google (Gemini)',
   frontend: 'Google (Gemini)',
   writer: 'Google (Gemini)',
-  explorer: 'Google (Gemini)'
+  explorer: 'Google (Gemini)',
+  multimodal: 'Google (Gemini)'
 };

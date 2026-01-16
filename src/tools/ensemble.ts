@@ -21,7 +21,7 @@ import {
 // ============================================================================
 
 const participantSchema = z.object({
-  expert: z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer'])
+  expert: z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer', 'multimodal'])
     .describe('참여 전문가 ID'),
   weight: z.number().min(0).max(2).optional()
     .describe('가중치 (0-2, 기본: 1.0)'),
@@ -38,13 +38,13 @@ export const ensembleQuerySchema = z.object({
     .default('parallel')
     .describe('앙상블 전략'),
 
-  experts: z.array(z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer']))
+  experts: z.array(z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer', 'multimodal']))
     .min(1)
-    .max(6)
+    .max(7)
     .default(['strategist', 'researcher', 'reviewer'])
     .describe('참여할 전문가 목록'),
 
-  synthesizer: z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer'])
+  synthesizer: z.enum(['strategist', 'researcher', 'reviewer', 'frontend', 'writer', 'explorer', 'multimodal'])
     .optional()
     .describe('합성 담당 전문가 (synthesize 전략용)'),
 
@@ -120,7 +120,8 @@ export const ensembleQueryTool = {
 - reviewer (Gemini): 코드 리뷰, 버그/보안
 - frontend (Gemini): UI/UX, 컴포넌트
 - writer (Gemini): 문서 작성
-- explorer (Gemini): 빠른 탐색`,
+- explorer (Gemini): 빠른 탐색
+- multimodal (Gemini): 이미지/시각 분석`,
 
   inputSchema: ensembleQuerySchema,
 

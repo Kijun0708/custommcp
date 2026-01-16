@@ -7,6 +7,7 @@ import { reviewer, REVIEWER_METADATA } from './reviewer.js';
 import { frontend, FRONTEND_METADATA } from './frontend.js';
 import { writer, WRITER_METADATA } from './writer.js';
 import { explorer, EXPLORER_METADATA } from './explorer.js';
+import { multimodal, MULTIMODAL_METADATA } from './multimodal.js';
 import type { ExpertPromptMetadata } from '../prompts/metadata/expert-metadata.js';
 
 export const experts: Record<string, Expert> = {
@@ -15,7 +16,8 @@ export const experts: Record<string, Expert> = {
   reviewer,
   frontend,
   writer,
-  explorer
+  explorer,
+  multimodal
 };
 
 export type ExpertId = keyof typeof experts;
@@ -27,11 +29,12 @@ export const FALLBACK_CHAIN: Record<string, string[]> = {
   reviewer: ['explorer', 'writer'],
   frontend: ['writer', 'explorer'],
   writer: ['explorer', 'reviewer'],
-  explorer: ['writer', 'researcher']  // Added fallbacks for rate limit handling
+  explorer: ['writer', 'researcher'],
+  multimodal: ['researcher', 'reviewer']  // Multimodal fallback chain
 };
 
 // Export individual experts
-export { strategist, researcher, reviewer, frontend, writer, explorer };
+export { strategist, researcher, reviewer, frontend, writer, explorer, multimodal };
 
 // Export metadata
 export {
@@ -40,7 +43,8 @@ export {
   REVIEWER_METADATA,
   FRONTEND_METADATA,
   WRITER_METADATA,
-  EXPLORER_METADATA
+  EXPLORER_METADATA,
+  MULTIMODAL_METADATA
 };
 
 /**
@@ -52,7 +56,8 @@ export const EXPERT_METADATA_REGISTRY: Record<string, ExpertPromptMetadata> = {
   reviewer: REVIEWER_METADATA,
   frontend: FRONTEND_METADATA,
   writer: WRITER_METADATA,
-  explorer: EXPLORER_METADATA
+  explorer: EXPLORER_METADATA,
+  multimodal: MULTIMODAL_METADATA
 };
 
 /**
