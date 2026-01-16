@@ -12,6 +12,7 @@ export interface CallExpertWithToolsOptions {
   skipCache?: boolean;
   maxToolCalls?: number;
   enableTools?: boolean;  // 도구 사용 활성화 여부
+  imagePath?: string;     // 이미지 경로 (multimodal용)
 }
 
 /**
@@ -26,7 +27,8 @@ export async function callExpertWithTools(
     context,
     skipCache = false,
     maxToolCalls = MAX_TOOL_CALLS,
-    enableTools = true
+    enableTools = true,
+    imagePath
   } = options;
 
   const startTime = Date.now();
@@ -35,7 +37,7 @@ export async function callExpertWithTools(
 
   // 도구 비활성화 또는 전문가에 도구가 없으면 일반 호출
   if (!enableTools) {
-    return callExpert(expert, prompt, { context, skipCache });
+    return callExpert(expert, prompt, { context, skipCache, imagePath });
   }
 
   // 사용할 도구 결정 (전문가별 도구 또는 기본 도구)

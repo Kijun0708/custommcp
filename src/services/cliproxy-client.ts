@@ -1,6 +1,8 @@
 // src/services/cliproxy-client.ts
 
-import { Expert, ExpertResponse, ToolDefinition, ToolCall, ChatMessage } from '../types.js';
+import { Expert, ExpertResponse, ToolDefinition, ToolCall, ChatMessage, MessageContent, TextContent, ImageUrlContent } from '../types.js';
+import { readFileSync, existsSync } from 'fs';
+import { extname } from 'path';
 import { config } from '../config.js';
 import { logger, createExpertLogger } from '../utils/logger.js';
 import { getCached, setCache } from '../utils/cache.js';
@@ -9,11 +11,67 @@ import { withRetry } from '../utils/retry.js';
 
 interface ChatRequest {
   model: string;
-  messages: Array<{ role: string; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }>;
+  messages: Array<{ role: string; content: MessageContent | null; tool_calls?: ToolCall[]; tool_call_id?: string }>;
   temperature: number;
   max_tokens: number;
   tools?: ToolDefinition[];
   tool_choice?: "auto" | "required" | "none";
+}
+
+// Helper: Get MIME type from file extension
+function getMimeType(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml'
+  };
+  return mimeTypes[ext] || 'image/png';
+}
+
+// Helper: Load image and convert to base64 data URL
+export function loadImageAsDataUrl(imagePath: string): string {
+  if (!existsSync(imagePath)) {
+    throw new Error(`Image file not found: ${imagePath}`);
+  }
+
+  const imageBuffer = readFileSync(imagePath);
+  const base64 = imageBuffer.toString('base64');
+  const mimeType = getMimeType(imagePath);
+
+  return `data:${mimeType};base64,${base64}`;
+}
+
+// Helper: Build multimodal content with text and optional image
+export function buildMultimodalContent(text: string, imagePath?: string): MessageContent {
+  if (!imagePath) {
+    return text;
+  }
+
+  const content: Array<TextContent | ImageUrlContent> = [
+    { type: "text", text }
+  ];
+
+  // Check if it's a URL or file path
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    content.push({
+      type: "image_url",
+      image_url: { url: imagePath, detail: "high" }
+    });
+  } else {
+    // Load local file as base64
+    const dataUrl = loadImageAsDataUrl(imagePath);
+    content.push({
+      type: "image_url",
+      image_url: { url: dataUrl, detail: "high" }
+    });
+  }
+
+  return content;
 }
 
 interface ChatResponse {
@@ -58,6 +116,7 @@ export interface CallExpertOptions {
   tools?: ToolDefinition[];
   toolChoice?: "auto" | "required" | "none";
   messages?: ChatMessage[];  // 기존 대화 이력 (Tool Loop용)
+  imagePath?: string;        // 이미지 파일 경로 또는 URL (multimodal용)
 }
 
 export async function callExpert(
@@ -65,7 +124,7 @@ export async function callExpert(
   prompt: string,
   options: CallExpertOptions = {}
 ): Promise<ExpertResponse> {
-  const { context, skipCache = false, tools, toolChoice, messages } = options;
+  const { context, skipCache = false, tools, toolChoice, messages, imagePath } = options;
   const expertLogger = createExpertLogger(expert.id);
   const startTime = Date.now();
 
@@ -75,8 +134,8 @@ export async function callExpert(
     throw new RateLimitExceededError(expert.id, expert.model, 0);
   }
 
-  // 2. 캐시 체크
-  if (!skipCache) {
+  // 2. 캐시 체크 (이미지가 없는 경우만 - 이미지 포함 요청은 캐시하지 않음)
+  if (!skipCache && !imagePath) {
     const cached = getCached(expert.id, prompt, context);
     if (cached) {
       return {
@@ -106,10 +165,17 @@ export async function callExpert(
       ? `${prompt}\n\n[컨텍스트]\n${context}`
       : prompt;
 
+    // Build user content (with optional image for multimodal)
+    const userContent = buildMultimodalContent(fullPrompt, imagePath);
+
     requestMessages = [
       { role: "system", content: expert.systemPrompt },
-      { role: "user", content: fullPrompt }
+      { role: "user", content: userContent }
     ];
+
+    if (imagePath) {
+      expertLogger.debug({ imagePath }, 'Including image in request');
+    }
   }
 
   const request: ChatRequest = {

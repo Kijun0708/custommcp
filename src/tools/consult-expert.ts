@@ -19,6 +19,10 @@ export const consultExpertSchema = z.object({
     .optional()
     .describe("관련 코드, 설계 문서 등 추가 컨텍스트"),
 
+  image_path: z.string()
+    .optional()
+    .describe("분석할 이미지 파일 경로 또는 URL (multimodal 전문가용)"),
+
   skip_cache: z.boolean()
     .default(false)
     .optional()
@@ -66,6 +70,7 @@ export const consultExpertTool = {
 ### multimodal (Gemini 2.5 Pro)
 - 역할: 이미지/시각적 콘텐츠 분석, 스크린샷 해석, 다이어그램 이해
 - 사용 시점: 스크린샷 분석, UI 목업 리뷰, 다이어그램 해석, 에러 메시지 이미지 읽기
+- **이미지 전달**: image_path 파라미터로 로컬 파일 경로 또는 URL 전달
 
 ## Rate Limit 자동 처리
 - 전문가가 한도 초과 시 자동으로 대체 전문가로 폴백
@@ -83,7 +88,8 @@ export const consultExpertTool = {
 - 코드 리뷰: expert="reviewer", question="이 코드의 문제점을 찾아주세요"
 - UI 피드백: expert="frontend", question="이 대시보드 레이아웃 개선점은?"
 - 문서 작성: expert="writer", question="이 API의 README를 작성해주세요"
-- 빠른 탐색: expert="explorer", question="인증 관련 파일들이 어디에 있나요?"`,
+- 빠른 탐색: expert="explorer", question="인증 관련 파일들이 어디에 있나요?"
+- 이미지 분석: expert="multimodal", question="이 스크린샷을 분석해주세요", image_path="./screenshot.png"`,
 
   inputSchema: consultExpertSchema,
 
@@ -117,7 +123,8 @@ export async function handleConsultExpert(params: z.infer<typeof consultExpertSc
       params.question,
       fullContext || undefined,
       params.skip_cache,
-      enableTools
+      enableTools,
+      params.image_path
     );
 
     // 전문가 응답을 세션 메모리에 저장
@@ -141,6 +148,11 @@ export async function handleConsultExpert(params: z.infer<typeof consultExpertSc
     // 캐시 히트 알림
     if (result.cached) {
       response += `\n\n_📦 캐시된 응답 (${result.latencyMs}ms)_`;
+    }
+
+    // 이미지 분석 알림
+    if (params.image_path) {
+      response += `\n\n_🖼️ 이미지 분석: ${params.image_path}_`;
     }
 
     return {

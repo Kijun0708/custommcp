@@ -29,9 +29,25 @@ export interface ToolResult {
   content: string;
 }
 
+// Multimodal content types
+export interface TextContent {
+  type: "text";
+  text: string;
+}
+
+export interface ImageUrlContent {
+  type: "image_url";
+  image_url: {
+    url: string;  // Can be URL or data:image/...;base64,...
+    detail?: "auto" | "low" | "high";
+  };
+}
+
+export type MessageContent = string | Array<TextContent | ImageUrlContent>;
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: MessageContent | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }

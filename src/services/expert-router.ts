@@ -11,7 +11,8 @@ export async function callExpertWithFallback(
   expertId: string,
   prompt: string,
   context?: string,
-  skipCache: boolean = false
+  skipCache: boolean = false,
+  imagePath?: string
 ): Promise<ExpertResponse> {
   const expert = experts[expertId];
 
@@ -41,7 +42,7 @@ export async function callExpertWithFallback(
     : context;
 
   try {
-    const result = await callExpert(expert, prompt, { context: finalContext, skipCache });
+    const result = await callExpert(expert, prompt, { context: finalContext, skipCache, imagePath });
     const durationMs = Date.now() - startTime;
 
     // Execute onExpertResult hooks
@@ -86,7 +87,7 @@ export async function callExpertWithFallback(
 
         const fallbackExpert = experts[fallbackId];
         const fallbackStartTime = Date.now();
-        const result = await callExpert(fallbackExpert, prompt, { context: finalContext, skipCache });
+        const result = await callExpert(fallbackExpert, prompt, { context: finalContext, skipCache, imagePath });
         const fallbackDurationMs = Date.now() - fallbackStartTime;
 
         logger.info({ fallbackId }, 'Fallback succeeded');
@@ -156,7 +157,8 @@ export async function callExpertWithToolsAndFallback(
   prompt: string,
   context?: string,
   skipCache: boolean = false,
-  enableTools: boolean = true
+  enableTools: boolean = true,
+  imagePath?: string
 ): Promise<ExpertResponse> {
   const expert = experts[expertId];
 
@@ -189,7 +191,8 @@ export async function callExpertWithToolsAndFallback(
     const result = await callExpertWithTools(expert, prompt, {
       context: finalContext,
       skipCache,
-      enableTools: enableTools && expert.toolChoice !== "none"
+      enableTools: enableTools && expert.toolChoice !== "none",
+      imagePath
     });
 
     const durationMs = Date.now() - startTime;
@@ -239,7 +242,8 @@ export async function callExpertWithToolsAndFallback(
         const result = await callExpertWithTools(fallbackExpert, prompt, {
           context: finalContext,
           skipCache,
-          enableTools: enableTools && fallbackExpert.toolChoice !== "none"
+          enableTools: enableTools && fallbackExpert.toolChoice !== "none",
+          imagePath
         });
         const fallbackDurationMs = Date.now() - fallbackStartTime;
 
