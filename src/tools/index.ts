@@ -64,3 +64,11 @@ export {
   permissionSystemToggleTool, permissionSystemToggleSchema, handlePermissionSystemToggle,
   permissionClearSessionTool, permissionClearSessionSchema, handlePermissionClearSession
 } from './permission-system.js';
+export {
+  costStatusTool, costStatusSchema, handleCostStatus,
+  costHistoryTool, costHistorySchema, handleCostHistory,
+  costStatsTool, costStatsSchema, handleCostStats,
+  costResetTool, costResetSchema, handleCostReset,
+  costBudgetTool, costBudgetSchema, handleCostBudget,
+  costSystemToggleTool, costSystemToggleSchema, handleCostSystemToggle
+} from './cost-tracking.js';

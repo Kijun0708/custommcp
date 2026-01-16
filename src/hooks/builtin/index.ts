@@ -12,6 +12,7 @@ export { rateLimitHooks, registerRateLimitHooks } from './rate-limit-handler.js'
 export { errorRecoveryHooks, registerErrorRecoveryHooks } from './error-recovery.js';
 export { keywordDetectorHooks, registerKeywordDetectorHooks } from './keyword-detector.js';
 export { permissionCheckerHooks, registerPermissionCheckerHooks } from './permission-checker.js';
+export { costTrackerHooks, registerCostTrackingHook } from './cost-tracker.js';
 
 import { registerLoggingHooks } from './logging.js';
 import { registerContextInjectorHooks } from './context-injector.js';
@@ -19,6 +20,8 @@ import { registerRateLimitHooks } from './rate-limit-handler.js';
 import { registerErrorRecoveryHooks } from './error-recovery.js';
 import { registerKeywordDetectorHooks } from './keyword-detector.js';
 import { registerPermissionCheckerHooks } from './permission-checker.js';
+import { costTrackingHook } from './cost-tracker.js';
+import { getHookManager } from '../manager.js';
 
 /**
  * Registers all built-in hooks.
@@ -30,4 +33,8 @@ export function registerAllBuiltinHooks(): void {
   registerErrorRecoveryHooks();
   registerKeywordDetectorHooks();
   registerPermissionCheckerHooks();
+
+  // Cost Tracking Hook (low priority, runs after others)
+  const hookManager = getHookManager();
+  hookManager.registerHook(costTrackingHook);
 }

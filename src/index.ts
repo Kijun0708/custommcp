@@ -56,7 +56,13 @@ import {
   permissionListTool, permissionListSchema, handlePermissionList,
   permissionPatternToggleTool, permissionPatternToggleSchema, handlePermissionPatternToggle,
   permissionSystemToggleTool, permissionSystemToggleSchema, handlePermissionSystemToggle,
-  permissionClearSessionTool, permissionClearSessionSchema, handlePermissionClearSession
+  permissionClearSessionTool, permissionClearSessionSchema, handlePermissionClearSession,
+  costStatusTool, costStatusSchema, handleCostStatus,
+  costHistoryTool, costHistorySchema, handleCostHistory,
+  costStatsTool, costStatsSchema, handleCostStats,
+  costResetTool, costResetSchema, handleCostReset,
+  costBudgetTool, costBudgetSchema, handleCostBudget,
+  costSystemToggleTool, costSystemToggleSchema, handleCostSystemToggle
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -396,7 +402,49 @@ function registerTools() {
     (args) => handlePermissionClearSession(permissionClearSessionSchema.parse(args))
   );
 
-  logger.info('All tools registered (47 tools)');
+  // 48. cost_status
+  server.tool(
+    costStatusTool.name,
+    costStatusSchema.shape,
+    (args) => handleCostStatus(costStatusSchema.parse(args))
+  );
+
+  // 49. cost_history
+  server.tool(
+    costHistoryTool.name,
+    costHistorySchema.shape,
+    (args) => handleCostHistory(costHistorySchema.parse(args))
+  );
+
+  // 50. cost_stats
+  server.tool(
+    costStatsTool.name,
+    costStatsSchema.shape,
+    (args) => handleCostStats(costStatsSchema.parse(args))
+  );
+
+  // 51. cost_reset
+  server.tool(
+    costResetTool.name,
+    costResetSchema.shape,
+    (args) => handleCostReset(costResetSchema.parse(args))
+  );
+
+  // 52. cost_budget
+  server.tool(
+    costBudgetTool.name,
+    costBudgetSchema.shape,
+    (args) => handleCostBudget(costBudgetSchema.parse(args))
+  );
+
+  // 53. cost_system_toggle
+  server.tool(
+    costSystemToggleTool.name,
+    costSystemToggleSchema.shape,
+    (args) => handleCostSystemToggle(costSystemToggleSchema.parse(args))
+  );
+
+  logger.info('All tools registered (53 tools)');
 }
 
 // 메인 함수
