@@ -72,3 +72,8 @@ export {
   costBudgetTool, costBudgetSchema, handleCostBudget,
   costSystemToggleTool, costSystemToggleSchema, handleCostSystemToggle
 } from './cost-tracking.js';
+export {
+  ensembleQueryTool, ensembleQuerySchema, handleEnsembleQuery,
+  ensemblePresetTool, ensemblePresetSchema, handleEnsemblePreset,
+  ensemblePresetsListTool, ensemblePresetsListSchema, handleEnsemblePresetsList
+} from './ensemble.js';

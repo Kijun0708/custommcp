@@ -62,7 +62,10 @@ import {
   costStatsTool, costStatsSchema, handleCostStats,
   costResetTool, costResetSchema, handleCostReset,
   costBudgetTool, costBudgetSchema, handleCostBudget,
-  costSystemToggleTool, costSystemToggleSchema, handleCostSystemToggle
+  costSystemToggleTool, costSystemToggleSchema, handleCostSystemToggle,
+  ensembleQueryTool, ensembleQuerySchema, handleEnsembleQuery,
+  ensemblePresetTool, ensemblePresetSchema, handleEnsemblePreset,
+  ensemblePresetsListTool, ensemblePresetsListSchema, handleEnsemblePresetsList
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -444,7 +447,28 @@ function registerTools() {
     (args) => handleCostSystemToggle(costSystemToggleSchema.parse(args))
   );
 
-  logger.info('All tools registered (53 tools)');
+  // 54. ensemble_query
+  server.tool(
+    ensembleQueryTool.name,
+    ensembleQuerySchema.shape,
+    (args) => handleEnsembleQuery(ensembleQuerySchema.parse(args))
+  );
+
+  // 55. ensemble_preset
+  server.tool(
+    ensemblePresetTool.name,
+    ensemblePresetSchema.shape,
+    (args) => handleEnsemblePreset(ensemblePresetSchema.parse(args))
+  );
+
+  // 56. ensemble_presets_list
+  server.tool(
+    ensemblePresetsListTool.name,
+    ensemblePresetsListSchema.shape,
+    () => handleEnsemblePresetsList()
+  );
+
+  logger.info('All tools registered (56 tools)');
 }
 
 // 메인 함수
