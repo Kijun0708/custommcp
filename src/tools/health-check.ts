@@ -1,7 +1,7 @@
 // src/tools/health-check.ts
 
 import { z } from "zod";
-import { config } from "../config.js";
+import { config, reloadConfig } from "../config.js";
 import { getRateLimitStatus } from "../utils/rate-limit.js";
 import { getCacheStats, clearCache } from "../utils/cache.js";
 import { getStats as getBackgroundStats, cleanupOldTasks } from "../services/background-manager.js";
@@ -18,7 +18,11 @@ export const healthCheckSchema = z.object({
 
   cleanup_tasks: z.boolean()
     .default(false)
-    .describe("오래된 백그라운드 작업 정리")
+    .describe("오래된 백그라운드 작업 정리"),
+
+  reload_port: z.number()
+    .optional()
+    .describe("CLIProxyAPI 포트 변경 및 config 재로드 (예: 8317)")
 }).strict();
 
 export const healthCheckTool = {
@@ -50,6 +54,13 @@ export const healthCheckTool = {
 };
 
 export async function handleHealthCheck(params: z.infer<typeof healthCheckSchema>) {
+  // 포트 변경 및 config 재로드
+  let portChanged = false;
+  if (params.reload_port) {
+    reloadConfig(params.reload_port);
+    portChanged = true;
+  }
+
   // 캐시 정리
   if (params.clear_cache) {
     clearCache();
@@ -89,6 +100,11 @@ export async function handleHealthCheck(params: z.infer<typeof healthCheckSchema
   const backgroundStats = getBackgroundStats();
 
   let output = `## 🏥 LLM Router 상태\n\n`;
+
+  if (portChanged) {
+    output += `### ✅ Config 재로드됨\n`;
+    output += `- 새 포트: ${params.reload_port}\n\n`;
+  }
 
   output += `### CLIProxyAPI\n`;
   output += `- URL: \`${config.cliproxyUrl}\`\n`;

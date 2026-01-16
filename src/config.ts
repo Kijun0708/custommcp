@@ -13,7 +13,7 @@ const projectRoot = join(__dirname, '..');
 const defaultCliproxyPath = join(projectRoot, 'vendor', 'cliproxy', 'cli-proxy-api.exe');
 
 export function loadConfig(overridePort?: number): Config {
-  const baseUrl = process.env.CLIPROXY_URL || 'http://localhost:8787';
+  const baseUrl = process.env.CLIPROXY_URL || 'http://localhost:8317';
   const cliproxyUrl = overridePort
     ? `http://127.0.0.1:${overridePort}`
     : baseUrl;

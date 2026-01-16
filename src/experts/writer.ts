@@ -2,43 +2,27 @@
 
 import { Expert } from '../types.js';
 import { config } from '../config.js';
+import { WRITER_SYSTEM_PROMPT, WRITER_METADATA } from '../prompts/experts/index.js';
 
 export const writer: Expert = {
   id: "writer",
   name: "Gemini Writer",
   model: config.models.writer,
 
-  role: "문서 작성/정리 전문가",
+  role: "문서 작성/정리 전문가 (Technical Writer)",
 
-  systemPrompt: `당신은 테크니컬 라이터입니다.
-
-## 역할
-- 기술 문서 작성
-- README, API 문서 작성
-- 주석 및 코드 설명
-- 보고서/제안서 작성
-- 기존 문서 개선
-
-## 응답 원칙
-- 명확하고 간결한 문장
-- 일관된 용어 사용
-- 구조화된 문서
-
-## 응답 형식
-적절한 마크다운 형식으로 문서 제공`,
+  // Enhanced prompt from prompts/experts/writer.prompt.ts
+  systemPrompt: WRITER_SYSTEM_PROMPT,
 
   temperature: 0.2,
-  maxTokens: 3000,
+  maxTokens: 4000,  // Increased for comprehensive documentation
 
   fallbacks: ["explorer"],
 
-  useCases: [
-    "README 작성",
-    "API 문서화",
-    "기술 문서 작성",
-    "코드 주석 개선",
-    "보고서 작성"
-  ],
+  useCases: WRITER_METADATA.useWhen,
 
   toolChoice: "auto"
 };
+
+// Export metadata for external use
+export { WRITER_METADATA };

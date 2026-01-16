@@ -28,7 +28,11 @@ import {
   setExpertModelTool, setExpertModelSchema, handleSetExpertModel,
   memoryAddTool, memoryAddSchema, handleMemoryAdd,
   memoryListTool, memoryListSchema, handleMemoryList,
-  memoryClearTool, memoryClearSchema, handleMemoryClear
+  memoryClearTool, memoryClearSchema, handleMemoryClear,
+  orchestrateTaskTool, orchestrateTaskSchema, handleOrchestrateTask,
+  ralphLoopStartTool, ralphLoopStartSchema, handleRalphLoopStart,
+  ralphLoopCancelTool, ralphLoopCancelSchema, handleRalphLoopCancel,
+  ralphLoopStatusTool, ralphLoopStatusSchema, handleRalphLoopStatus
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -186,7 +190,35 @@ function registerTools() {
     (args) => handleMemoryClear(memoryClearSchema.parse(args))
   );
 
-  logger.info('All tools registered (21 tools)');
+  // 22. orchestrate_task
+  server.tool(
+    orchestrateTaskTool.name,
+    orchestrateTaskSchema.shape,
+    (args) => handleOrchestrateTask(orchestrateTaskSchema.parse(args))
+  );
+
+  // 23. ralph_loop_start
+  server.tool(
+    ralphLoopStartTool.name,
+    ralphLoopStartSchema.shape,
+    (args) => handleRalphLoopStart(ralphLoopStartSchema.parse(args))
+  );
+
+  // 24. ralph_loop_cancel
+  server.tool(
+    ralphLoopCancelTool.name,
+    ralphLoopCancelSchema.shape,
+    () => handleRalphLoopCancel()
+  );
+
+  // 25. ralph_loop_status
+  server.tool(
+    ralphLoopStatusTool.name,
+    ralphLoopStatusSchema.shape,
+    () => handleRalphLoopStatus()
+  );
+
+  logger.info('All tools registered (25 tools)');
 }
 
 // 메인 함수

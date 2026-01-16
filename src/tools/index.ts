@@ -28,3 +28,9 @@ export {
   memoryListTool, memoryListSchema, handleMemoryList,
   memoryClearTool, memoryClearSchema, handleMemoryClear
 } from './session-memory.js';
+export { orchestrateTaskTool, orchestrateTaskSchema, handleOrchestrateTask } from './orchestrate-task.js';
+export {
+  ralphLoopStartTool, ralphLoopStartSchema, handleRalphLoopStart,
+  ralphLoopCancelTool, ralphLoopCancelSchema, handleRalphLoopCancel,
+  ralphLoopStatusTool, ralphLoopStatusSchema, handleRalphLoopStatus
+} from './ralph-loop.js';
