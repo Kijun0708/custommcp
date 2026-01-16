@@ -34,6 +34,7 @@ import {
 } from './constants.js';
 import { callExpertWithFallback } from '../../services/expert-router.js';
 import { logger } from '../../utils/logger.js';
+import { executeHooks } from '../../hooks/index.js';
 
 /**
  * Sleep utility for delays between iterations.
@@ -242,6 +243,15 @@ export class RalphLoopManager {
     let allOutputs: string[] = [];
     let finalResult: RalphLoopIterationResult | null = null;
 
+    // Execute onRalphLoopStart hook
+    await executeHooks('onRalphLoopStart', {
+      taskId,
+      prompt,
+      maxIterations: state.maxIterations,
+      completionPromise: state.completionPromise,
+      expert: state.expert || 'strategist'
+    });
+
     try {
       // Execute iterations
       while (state.active && !this.cancelled) {
@@ -251,6 +261,16 @@ export class RalphLoopManager {
         const result = await executeIteration(state, isInitial, this.config);
         allOutputs.push(result.output);
         finalResult = result;
+
+        // Execute onRalphLoopIteration hook
+        await executeHooks('onRalphLoopIteration', {
+          taskId,
+          iteration: state.iteration,
+          maxIterations: state.maxIterations,
+          output: result.output.substring(0, 500),
+          completionDetected: result.completionDetected,
+          detectedPromise: result.detectedPromise
+        });
 
         // Update state with last output
         updateLastOutput(this.directory, result.output, this.config.stateFilePath);
@@ -265,7 +285,7 @@ export class RalphLoopManager {
 
           clearState(this.directory, this.config.stateFilePath);
 
-          return {
+          const completedResult: RalphLoopResult = {
             completed: true,
             output: this.formatFinalOutput(allOutputs, result),
             iterations: state.iteration,
@@ -274,6 +294,18 @@ export class RalphLoopManager {
             totalTimeMs: Date.now() - startTime,
             detectedPromise: result.detectedPromise
           };
+
+          // Execute onRalphLoopEnd hook
+          await executeHooks('onRalphLoopEnd', {
+            taskId,
+            completed: true,
+            iterations: state.iteration,
+            maxIterationsReached: false,
+            cancelled: false,
+            totalDurationMs: completedResult.totalTimeMs
+          });
+
+          return completedResult;
         }
 
         // Check max iterations
@@ -286,7 +318,7 @@ export class RalphLoopManager {
 
           clearState(this.directory, this.config.stateFilePath);
 
-          return {
+          const maxIterResult: RalphLoopResult = {
             completed: false,
             output: this.formatFinalOutput(allOutputs, result),
             iterations: state.iteration,
@@ -294,6 +326,18 @@ export class RalphLoopManager {
             cancelled: false,
             totalTimeMs: Date.now() - startTime
           };
+
+          // Execute onRalphLoopEnd hook
+          await executeHooks('onRalphLoopEnd', {
+            taskId,
+            completed: false,
+            iterations: state.iteration,
+            maxIterationsReached: true,
+            cancelled: false,
+            totalDurationMs: maxIterResult.totalTimeMs
+          });
+
+          return maxIterResult;
         }
 
         // Check if cancelled
@@ -318,7 +362,7 @@ export class RalphLoopManager {
       // Cancelled or error exit
       clearState(this.directory, this.config.stateFilePath);
 
-      return {
+      const cancelledResult: RalphLoopResult = {
         completed: false,
         output: this.formatFinalOutput(allOutputs, finalResult),
         iterations: state.iteration,
@@ -327,11 +371,23 @@ export class RalphLoopManager {
         totalTimeMs: Date.now() - startTime
       };
 
+      // Execute onRalphLoopEnd hook
+      await executeHooks('onRalphLoopEnd', {
+        taskId,
+        completed: false,
+        iterations: state.iteration,
+        maxIterationsReached: false,
+        cancelled: this.cancelled,
+        totalDurationMs: cancelledResult.totalTimeMs
+      });
+
+      return cancelledResult;
+
     } catch (error) {
       logger.error({ error, taskId }, 'Ralph Loop execution failed');
       clearState(this.directory, this.config.stateFilePath);
 
-      return {
+      const errorResult: RalphLoopResult = {
         completed: false,
         output: `Ralph Loop failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         iterations: state.iteration,
@@ -339,6 +395,25 @@ export class RalphLoopManager {
         cancelled: false,
         totalTimeMs: Date.now() - startTime
       };
+
+      // Execute onRalphLoopEnd hook
+      await executeHooks('onRalphLoopEnd', {
+        taskId,
+        completed: false,
+        iterations: state.iteration,
+        maxIterationsReached: false,
+        cancelled: false,
+        totalDurationMs: errorResult.totalTimeMs
+      });
+
+      // Execute onError hook
+      await executeHooks('onError', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        source: `ralph-loop:${taskId}`,
+        recoverable: false
+      });
+
+      return errorResult;
     }
   }
 

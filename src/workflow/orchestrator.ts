@@ -22,6 +22,7 @@ import {
 } from './types.js';
 import { PHASE_HANDLERS, contextToResult } from './phases/index.js';
 import { logger } from '../utils/logger.js';
+import { executeHooks } from '../hooks/index.js';
 
 /**
  * Sleep utility for polling.
@@ -105,16 +106,33 @@ export class WorkflowOrchestrator implements IWorkflowOrchestrator {
 
     logger.info({ request: request.substring(0, 100) }, 'Starting workflow');
 
+    // Execute onWorkflowStart hook
+    await executeHooks('onWorkflowStart', {
+      request,
+      ralphLoopMode: false,
+      maxAttempts: config.maxAttempts
+    });
+
     // Start with intent phase
     let currentPhase: PhaseId | undefined = 'intent';
     let lastOutput = '';
+    let previousPhase: PhaseId | undefined;
 
     try {
       // Main execution loop
       while (currentPhase && !this.cancelled) {
+        // Execute onWorkflowPhase hook
+        await executeHooks('onWorkflowPhase', {
+          phaseId: currentPhase,
+          previousPhase,
+          attemptNumber: context.implementationAttempts + 1,
+          previousOutput: lastOutput.substring(0, 500)
+        });
+
         const result = await this.executePhase(context, currentPhase);
 
         lastOutput = result.output;
+        previousPhase = currentPhase;
         currentPhase = result.nextPhase;
 
         // Check for workflow timeout
@@ -130,12 +148,23 @@ export class WorkflowOrchestrator implements IWorkflowOrchestrator {
       const success = !context.escalationRequired &&
                      context.implementationAttempts < context.maxAttempts;
 
-      return contextToResult(context, lastOutput, success);
+      const result = contextToResult(context, lastOutput, success);
+
+      // Execute onWorkflowEnd hook
+      await executeHooks('onWorkflowEnd', {
+        success: result.success,
+        phasesExecuted: result.phasesExecuted,
+        totalDurationMs: result.totalTimeMs,
+        escalated: result.escalated,
+        output: result.output.substring(0, 1000)
+      });
+
+      return result;
 
     } catch (error) {
       logger.error({ error }, 'Workflow execution failed');
 
-      return {
+      const errorResult = {
         success: false,
         output: `Workflow failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         phasesExecuted: context.phaseHistory.map(p => p.phaseId),
@@ -143,6 +172,24 @@ export class WorkflowOrchestrator implements IWorkflowOrchestrator {
         attemptsMade: context.implementationAttempts,
         escalated: true
       };
+
+      // Execute onWorkflowEnd hook for failure
+      await executeHooks('onWorkflowEnd', {
+        success: false,
+        phasesExecuted: errorResult.phasesExecuted,
+        totalDurationMs: errorResult.totalTimeMs,
+        escalated: true,
+        output: errorResult.output
+      });
+
+      // Execute onError hook
+      await executeHooks('onError', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        source: 'workflow',
+        recoverable: false
+      });
+
+      return errorResult;
     } finally {
       this.currentContext = null;
     }
