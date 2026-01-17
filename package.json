@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/js-yaml": "^4.0.9",
     "dotenv": "^17.2.3",
+    "js-yaml": "^4.1.1",
     "lru-cache": "^10.0.0",
     "pino": "^8.0.0",
     "pino-pretty": "^10.0.0",

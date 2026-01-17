@@ -87,7 +87,9 @@ export {
   lspGetReferencesTool, lspGetReferencesSchema, handleLspGetReferences,
   lspGetHoverTool, lspGetHoverSchema, handleLspGetHover,
   lspWorkspaceSymbolsTool, lspWorkspaceSymbolsSchema, handleLspWorkspaceSymbols,
-  lspCheckServerTool, lspCheckServerSchema, handleLspCheckServer
+  lspCheckServerTool, lspCheckServerSchema, handleLspCheckServer,
+  lspPrepareRenameTool, lspPrepareRenameSchema, handleLspPrepareRename,
+  lspRenameTool, lspRenameSchema, handleLspRename
 } from './lsp.js';
 export {
   contextStatusTool, contextStatusSchema, handleContextStatus,
@@ -106,3 +108,33 @@ export {
 export {
   magicKeywordsTool, magicKeywordsSchema, handleMagicKeywords
 } from './magic-keywords.js';
+export {
+  grepAppSearchTool, grepAppSearchSchema, handleGrepAppSearch,
+  grepAppLanguagesTool, grepAppLanguagesSchema, handleGrepAppLanguages
+} from './grep-app.js';
+export {
+  sessionListTool, sessionListSchema, handleSessionList,
+  sessionReadTool, sessionReadSchema, handleSessionRead,
+  sessionSearchTool, sessionSearchSchema, handleSessionSearch,
+  sessionInfoTool, sessionInfoSchema, handleSessionInfo
+} from './session-transcript.js';
+export {
+  gitAtomicCommitTool, gitAtomicCommitSchema, handleGitAtomicCommit,
+  gitHistorySearchTool, gitHistorySearchSchema, handleGitHistorySearch,
+  gitRebasePlannerTool, gitRebasePlannerSchema, handleGitRebasePlanner,
+  gitSquashHelperTool, gitSquashHelperSchema, handleGitSquashHelper,
+  gitBranchAnalysisTool, gitBranchAnalysisSchema, handleGitBranchAnalysis
+} from './git-master.js';
+export {
+  commandListTool, commandListSchema, handleCommandList,
+  commandGetTool, commandGetSchema, handleCommandGet,
+  commandExecuteTool, commandExecuteSchema, handleCommandExecute,
+  commandRescanTool, commandRescanSchema, handleCommandRescan,
+  commandConfigTool, commandConfigSchema, handleCommandConfig
+} from './command-discovery.js';
+export {
+  playwrightScreenshotTool, playwrightScreenshotSchema, handlePlaywrightScreenshot,
+  playwrightExtractTool, playwrightExtractSchema, handlePlaywrightExtract,
+  playwrightActionTool, playwrightActionSchema, handlePlaywrightAction,
+  playwrightPdfTool, playwrightPdfSchema, handlePlaywrightPdf
+} from './playwright.js';

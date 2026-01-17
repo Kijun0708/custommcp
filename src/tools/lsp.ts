@@ -14,8 +14,11 @@ import {
   getHoverInfo,
   findWorkspaceSymbols,
   checkLanguageServerAvailability,
+  prepareRename,
+  performRename,
   Location
 } from '../services/lsp-client.js';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 
 /**
@@ -92,6 +95,48 @@ export const lspCheckServerSchema = z.object({
 });
 
 export type LspCheckServerParams = z.infer<typeof lspCheckServerSchema>;
+
+/**
+ * LSP Prepare Rename Schema
+ */
+export const lspPrepareRenameSchema = z.object({
+  file_path: z.string()
+    .describe("파일의 절대 경로 또는 상대 경로"),
+  line: z.number()
+    .min(0)
+    .describe("줄 번호 (0-indexed)"),
+  character: z.number()
+    .min(0)
+    .describe("열 번호 (0-indexed)")
+});
+
+export type LspPrepareRenameParams = z.infer<typeof lspPrepareRenameSchema>;
+
+/**
+ * LSP Rename Schema
+ */
+export const lspRenameSchema = z.object({
+  file_path: z.string()
+    .describe("파일의 절대 경로 또는 상대 경로"),
+  line: z.number()
+    .min(0)
+    .describe("줄 번호 (0-indexed)"),
+  character: z.number()
+    .min(0)
+    .describe("열 번호 (0-indexed)"),
+  new_name: z.string()
+    .min(1)
+    .describe("새 심볼 이름"),
+  search_path: z.string()
+    .optional()
+    .describe("검색 범위 경로 (기본: 파일이 위치한 디렉토리)"),
+  dry_run: z.boolean()
+    .optional()
+    .default(true)
+    .describe("테스트 모드 (기본: true - 실제 변경 없음)")
+});
+
+export type LspRenameParams = z.infer<typeof lspRenameSchema>;
 
 /**
  * LSP Get Definition Tool
@@ -187,6 +232,49 @@ export const lspCheckServerTool = {
 - python: pylsp, pyright
 - rust: rust-analyzer
 - go: gopls`
+};
+
+/**
+ * LSP Prepare Rename Tool
+ */
+export const lspPrepareRenameTool = {
+  name: "lsp_prepare_rename",
+  description: `심볼 리네이밍 가능 여부 확인.
+
+## 기능
+- 지정된 위치의 심볼이 리네이밍 가능한지 검증
+- 심볼 범위와 현재 이름 반환
+- 키워드, 빈 위치 등 리네이밍 불가능한 경우 에러 반환
+
+## 사용 예시
+- file_path="src/utils.ts", line=10, character=6
+- 리네이밍 전 유효성 검사에 사용
+
+## 결과
+- 성공: 심볼 범위와 placeholder (현재 이름) 반환
+- 실패: 에러 메시지 반환`
+};
+
+/**
+ * LSP Rename Tool
+ */
+export const lspRenameTool = {
+  name: "lsp_rename",
+  description: `워크스페이스 전체 심볼 리네이밍.
+
+## 기능
+- 변수, 함수, 클래스 등의 이름을 전체 프로젝트에서 변경
+- dry_run 모드로 변경 사항 미리보기 가능
+- 실제 파일 수정 지원
+
+## 사용 예시
+- 미리보기: file_path="src/utils.ts", line=10, character=6, new_name="newFunctionName", dry_run=true
+- 실제 적용: dry_run=false 로 설정
+
+## 주의사항
+- 기본값은 dry_run=true (안전 모드)
+- 실제 변경 전 반드시 미리보기 확인 권장
+- 변경 후 git diff로 결과 확인 권장`
 };
 
 /**
@@ -467,6 +555,169 @@ export async function handleLspCheckServer(params: LspCheckServerParams) {
   }
 }
 
+/**
+ * Handle LSP Prepare Rename
+ */
+export async function handleLspPrepareRename(params: LspPrepareRenameParams) {
+  try {
+    const filePath = resolve(params.file_path);
+    const result = await prepareRename(filePath, {
+      line: params.line,
+      character: params.character
+    });
+
+    if (!result.success) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `## ⚠️ 리네이밍 불가\n\n**오류**: ${result.error}\n**위치**: ${params.file_path}:${params.line + 1}:${params.character + 1}`
+        }]
+      };
+    }
+
+    return {
+      content: [{
+        type: "text" as const,
+        text: `## ✅ 리네이밍 가능\n\n**현재 이름**: \`${result.placeholder}\`\n**위치**: ${params.file_path}:${params.line + 1}:${params.character + 1}\n**범위**: 줄 ${result.range!.start.line + 1}, 열 ${result.range!.start.character + 1} ~ ${result.range!.end.character + 1}\n\n\`lsp_rename\` 도구로 새 이름을 지정하여 리네이밍을 실행하세요.`
+      }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{
+        type: "text" as const,
+        text: `## ⚠️ 오류\n\n${errorMessage}`
+      }]
+    };
+  }
+}
+
+/**
+ * Handle LSP Rename
+ */
+export async function handleLspRename(params: LspRenameParams) {
+  try {
+    const filePath = resolve(params.file_path);
+    const searchPath = params.search_path ? resolve(params.search_path) : dirname(filePath);
+    const dryRun = params.dry_run !== false; // Default to true
+
+    const result = await performRename(filePath, {
+      line: params.line,
+      character: params.character
+    }, params.new_name, searchPath);
+
+    if (!result.success) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `## ⚠️ 리네이밍 실패\n\n**오류**: ${result.error}`
+        }]
+      };
+    }
+
+    const fileCount = Object.keys(result.changes).length;
+    const editCount = Object.values(result.changes).reduce((sum, edits) => sum + edits.length, 0);
+
+    if (editCount === 0) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `## 리네이밍 결과\n\n변경할 항목이 없습니다.`
+        }]
+      };
+    }
+
+    // Build preview
+    const lines: string[] = [];
+    lines.push(`## ${dryRun ? '🔍 리네이밍 미리보기' : '✅ 리네이밍 완료'}`);
+    lines.push('');
+    lines.push(`**새 이름**: \`${params.new_name}\``);
+    lines.push(`**변경 파일**: ${fileCount}개`);
+    lines.push(`**변경 위치**: ${editCount}개`);
+    lines.push(`**검색 범위**: ${searchPath}`);
+    lines.push('');
+
+    // Group changes by file
+    for (const [uri, edits] of Object.entries(result.changes)) {
+      const file = uri.replace('file://', '');
+      lines.push(`### ${file}`);
+
+      // Sort edits by line
+      const sortedEdits = edits.sort((a, b) => a.range.start.line - b.range.start.line);
+
+      for (const edit of sortedEdits.slice(0, 10)) { // Limit preview
+        lines.push(`- 줄 ${edit.range.start.line + 1}, 열 ${edit.range.start.character + 1}`);
+      }
+
+      if (sortedEdits.length > 10) {
+        lines.push(`- ... 외 ${sortedEdits.length - 10}개 위치`);
+      }
+      lines.push('');
+    }
+
+    // Apply changes if not dry run
+    if (!dryRun) {
+      const modifiedFiles: string[] = [];
+
+      for (const [uri, edits] of Object.entries(result.changes)) {
+        const file = uri.replace('file://', '');
+
+        if (!existsSync(file)) {
+          continue;
+        }
+
+        let content = readFileSync(file, 'utf-8');
+        const fileLines = content.split('\n');
+
+        // Sort edits in reverse order (bottom to top, right to left) to avoid offset issues
+        const sortedEdits = edits.sort((a, b) => {
+          if (a.range.start.line !== b.range.start.line) {
+            return b.range.start.line - a.range.start.line;
+          }
+          return b.range.start.character - a.range.start.character;
+        });
+
+        for (const edit of sortedEdits) {
+          const lineIndex = edit.range.start.line;
+          if (lineIndex >= 0 && lineIndex < fileLines.length) {
+            const line = fileLines[lineIndex];
+            const before = line.substring(0, edit.range.start.character);
+            const after = line.substring(edit.range.end.character);
+            fileLines[lineIndex] = before + edit.newText + after;
+          }
+        }
+
+        content = fileLines.join('\n');
+        writeFileSync(file, content, 'utf-8');
+        modifiedFiles.push(file);
+      }
+
+      lines.push('---');
+      lines.push(`**실제 수정된 파일**: ${modifiedFiles.length}개`);
+      lines.push('');
+      lines.push('> 💡 `git diff`로 변경 사항을 확인하세요.');
+    } else {
+      lines.push('---');
+      lines.push('> 💡 실제 변경을 적용하려면 `dry_run=false`로 설정하세요.');
+    }
+
+    return {
+      content: [{
+        type: "text" as const,
+        text: lines.join('\n')
+      }]
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{
+        type: "text" as const,
+        text: `## ⚠️ 오류\n\n${errorMessage}`
+      }]
+    };
+  }
+}
+
 export default {
   lspGetDefinitionTool,
   lspGetDefinitionSchema,
@@ -482,5 +733,11 @@ export default {
   handleLspWorkspaceSymbols,
   lspCheckServerTool,
   lspCheckServerSchema,
-  handleLspCheckServer
+  handleLspCheckServer,
+  lspPrepareRenameTool,
+  lspPrepareRenameSchema,
+  handleLspPrepareRename,
+  lspRenameTool,
+  lspRenameSchema,
+  handleLspRename
 };

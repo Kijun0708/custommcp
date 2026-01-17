@@ -560,10 +560,218 @@ export async function checkLanguageServerAvailability(language: string): Promise
   return { available: false, error: 'No language server found' };
 }
 
+/**
+ * Prepare rename result
+ */
+export interface PrepareRenameResult {
+  success: boolean;
+  range?: Range;
+  placeholder?: string;
+  error?: string;
+}
+
+/**
+ * Text edit for rename
+ */
+export interface TextEdit {
+  range: Range;
+  newText: string;
+}
+
+/**
+ * Workspace edit result
+ */
+export interface WorkspaceEditResult {
+  success: boolean;
+  changes: { [uri: string]: TextEdit[] };
+  error?: string;
+}
+
+/**
+ * Prepares a rename operation by validating the position
+ */
+export async function prepareRename(
+  filePath: string,
+  position: Position
+): Promise<PrepareRenameResult> {
+  try {
+    if (!existsSync(filePath)) {
+      return { success: false, error: `File not found: ${filePath}` };
+    }
+
+    const content = readFileSync(filePath, 'utf-8');
+    const identifier = getIdentifierAtPosition(content, position.line, position.character);
+
+    if (!identifier) {
+      return { success: false, error: 'No renameable symbol at position' };
+    }
+
+    // Check if it's a valid identifier for rename
+    // Keywords cannot be renamed
+    const keywords = [
+      'break', 'case', 'catch', 'continue', 'debugger', 'default', 'delete',
+      'do', 'else', 'finally', 'for', 'function', 'if', 'in', 'instanceof',
+      'new', 'return', 'switch', 'this', 'throw', 'try', 'typeof', 'var',
+      'void', 'while', 'with', 'class', 'const', 'enum', 'export', 'extends',
+      'import', 'super', 'implements', 'interface', 'let', 'package', 'private',
+      'protected', 'public', 'static', 'yield', 'async', 'await', 'of',
+      'true', 'false', 'null', 'undefined'
+    ];
+
+    if (keywords.includes(identifier)) {
+      return { success: false, error: `Cannot rename keyword: ${identifier}` };
+    }
+
+    const lines = content.split('\n');
+    const lineText = lines[position.line];
+
+    // Find the exact range of the identifier
+    let start = position.character;
+    let end = position.character;
+
+    while (start > 0 && /[a-zA-Z0-9_$]/.test(lineText[start - 1])) {
+      start--;
+    }
+    while (end < lineText.length && /[a-zA-Z0-9_$]/.test(lineText[end])) {
+      end++;
+    }
+
+    return {
+      success: true,
+      range: {
+        start: { line: position.line, character: start },
+        end: { line: position.line, character: end }
+      },
+      placeholder: identifier
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Performs a rename operation across the workspace
+ */
+export async function performRename(
+  filePath: string,
+  position: Position,
+  newName: string,
+  searchPath?: string
+): Promise<WorkspaceEditResult> {
+  try {
+    if (!existsSync(filePath)) {
+      return { success: false, changes: {}, error: `File not found: ${filePath}` };
+    }
+
+    // Validate new name
+    if (!newName || !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(newName)) {
+      return { success: false, changes: {}, error: `Invalid identifier: ${newName}` };
+    }
+
+    const content = readFileSync(filePath, 'utf-8');
+    const oldName = getIdentifierAtPosition(content, position.line, position.character);
+
+    if (!oldName) {
+      return { success: false, changes: {}, error: 'No identifier at position' };
+    }
+
+    if (oldName === newName) {
+      return { success: false, changes: {}, error: 'New name is same as old name' };
+    }
+
+    const cwd = searchPath || dirname(filePath);
+    const changes: { [uri: string]: TextEdit[] } = {};
+
+    // Find all references using grep
+    return new Promise((resolve) => {
+      const args = [
+        '-rn',
+        '--include=*.ts',
+        '--include=*.tsx',
+        '--include=*.js',
+        '--include=*.jsx',
+        '-E',
+        `\\b${oldName}\\b`,
+        '.'
+      ];
+
+      const child = spawn('grep', args, {
+        cwd,
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code !== 0 && code !== 1) {
+          resolve({ success: false, changes: {}, error: stderr || 'grep failed' });
+          return;
+        }
+
+        const lines = stdout.trim().split('\n').filter(l => l);
+
+        for (const line of lines) {
+          const match = line.match(/^([^:]+):(\d+):(.*)$/);
+          if (match) {
+            const [, file, lineNum, lineContent] = match;
+            const lineIndex = parseInt(lineNum, 10) - 1;
+            const fullPath = pathResolve(cwd, file);
+            const uri = `file://${fullPath.replace(/\\/g, '/')}`;
+
+            if (!changes[uri]) {
+              changes[uri] = [];
+            }
+
+            // Find all occurrences of the identifier in the line
+            const regex = new RegExp(`\\b${oldName}\\b`, 'g');
+            let m;
+            while ((m = regex.exec(lineContent)) !== null) {
+              changes[uri].push({
+                range: {
+                  start: { line: lineIndex, character: m.index },
+                  end: { line: lineIndex, character: m.index + oldName.length }
+                },
+                newText: newName
+              });
+            }
+          }
+        }
+
+        resolve({ success: true, changes });
+      });
+
+      child.on('error', (error) => {
+        resolve({ success: false, changes: {}, error: error.message });
+      });
+
+      setTimeout(() => {
+        child.kill();
+        resolve({ success: false, changes: {}, error: 'Search timed out' });
+      }, 30000);
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, changes: {}, error: errorMessage };
+  }
+}
+
 export default {
   findDefinition,
   findReferences,
   getHoverInfo,
   findWorkspaceSymbols,
-  checkLanguageServerAvailability
+  checkLanguageServerAvailability,
+  prepareRename,
+  performRename
 };

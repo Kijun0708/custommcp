@@ -138,5 +138,9 @@ export interface Config {
     writer: string;
     explorer: string;
     multimodal: string;
+    prometheus: string;
+    metis: string;
+    momus: string;
+    librarian: string;
   };
 }

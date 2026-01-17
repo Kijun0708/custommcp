@@ -8,6 +8,10 @@ import { frontend, FRONTEND_METADATA } from './frontend.js';
 import { writer, WRITER_METADATA } from './writer.js';
 import { explorer, EXPLORER_METADATA } from './explorer.js';
 import { multimodal, MULTIMODAL_METADATA } from './multimodal.js';
+import { prometheus, PROMETHEUS_METADATA } from './prometheus.js';
+import { metis, METIS_METADATA } from './metis.js';
+import { momus, MOMUS_METADATA } from './momus.js';
+import { librarian, LIBRARIAN_METADATA } from './librarian.js';
 import type { ExpertPromptMetadata } from '../prompts/metadata/expert-metadata.js';
 
 export const experts: Record<string, Expert> = {
@@ -17,7 +21,11 @@ export const experts: Record<string, Expert> = {
   frontend,
   writer,
   explorer,
-  multimodal
+  multimodal,
+  prometheus,
+  metis,
+  momus,
+  librarian
 };
 
 export type ExpertId = keyof typeof experts;
@@ -30,11 +38,15 @@ export const FALLBACK_CHAIN: Record<string, string[]> = {
   frontend: ['writer', 'explorer'],
   writer: ['explorer', 'reviewer'],
   explorer: ['writer', 'researcher'],
-  multimodal: ['researcher', 'reviewer']  // Multimodal fallback chain
+  multimodal: ['researcher', 'reviewer'],  // Multimodal fallback chain
+  prometheus: ['strategist', 'metis'],     // Planning agents
+  metis: ['prometheus', 'strategist'],
+  momus: ['reviewer', 'strategist'],
+  librarian: ['researcher', 'explorer']
 };
 
 // Export individual experts
-export { strategist, researcher, reviewer, frontend, writer, explorer, multimodal };
+export { strategist, researcher, reviewer, frontend, writer, explorer, multimodal, prometheus, metis, momus, librarian };
 
 // Export metadata
 export {
@@ -44,7 +56,11 @@ export {
   FRONTEND_METADATA,
   WRITER_METADATA,
   EXPLORER_METADATA,
-  MULTIMODAL_METADATA
+  MULTIMODAL_METADATA,
+  PROMETHEUS_METADATA,
+  METIS_METADATA,
+  MOMUS_METADATA,
+  LIBRARIAN_METADATA
 };
 
 /**
@@ -57,7 +73,11 @@ export const EXPERT_METADATA_REGISTRY: Record<string, ExpertPromptMetadata> = {
   frontend: FRONTEND_METADATA,
   writer: WRITER_METADATA,
   explorer: EXPLORER_METADATA,
-  multimodal: MULTIMODAL_METADATA
+  multimodal: MULTIMODAL_METADATA,
+  prometheus: PROMETHEUS_METADATA,
+  metis: METIS_METADATA,
+  momus: MOMUS_METADATA,
+  librarian: LIBRARIAN_METADATA
 };
 
 /**

@@ -9,6 +9,11 @@ import { logger } from "./utils/logger.js";
 import { ensureCliproxyRunning } from "./utils/cliproxy-launcher.js";
 import { setupHookSystem } from "./hooks/index.js";
 
+// New tool registrations
+import { registerInteractiveBashTools } from "./tools/interactive-bash.js";
+import { registerSkillTools } from "./tools/skill.js";
+import { registerMcpManagerTools } from "./tools/mcp-manager.js";
+
 // 도구 임포트
 import {
   consultExpertTool, consultExpertSchema, handleConsultExpert,
@@ -74,6 +79,8 @@ import {
   lspGetHoverTool, lspGetHoverSchema, handleLspGetHover,
   lspWorkspaceSymbolsTool, lspWorkspaceSymbolsSchema, handleLspWorkspaceSymbols,
   lspCheckServerTool, lspCheckServerSchema, handleLspCheckServer,
+  lspPrepareRenameTool, lspPrepareRenameSchema, handleLspPrepareRename,
+  lspRenameTool, lspRenameSchema, handleLspRename,
   contextStatusTool, contextStatusSchema, handleContextStatus,
   contextConfigTool, contextConfigSchema, handleContextConfig,
   truncatorConfigTool, truncatorConfigSchema, handleTruncatorConfig,
@@ -82,7 +89,27 @@ import {
   editRecoveryTool, editRecoverySchema, handleEditRecovery,
   commentCheckerTool, commentCheckerSchema, handleCommentChecker,
   directoryInjectorTool, directoryInjectorSchema, handleDirectoryInjector,
-  magicKeywordsTool, magicKeywordsSchema, handleMagicKeywords
+  magicKeywordsTool, magicKeywordsSchema, handleMagicKeywords,
+  grepAppSearchTool, grepAppSearchSchema, handleGrepAppSearch,
+  grepAppLanguagesTool, grepAppLanguagesSchema, handleGrepAppLanguages,
+  sessionListTool, sessionListSchema, handleSessionList,
+  sessionReadTool, sessionReadSchema, handleSessionRead,
+  sessionSearchTool, sessionSearchSchema, handleSessionSearch,
+  sessionInfoTool, sessionInfoSchema, handleSessionInfo,
+  gitAtomicCommitTool, gitAtomicCommitSchema, handleGitAtomicCommit,
+  gitHistorySearchTool, gitHistorySearchSchema, handleGitHistorySearch,
+  gitRebasePlannerTool, gitRebasePlannerSchema, handleGitRebasePlanner,
+  gitSquashHelperTool, gitSquashHelperSchema, handleGitSquashHelper,
+  gitBranchAnalysisTool, gitBranchAnalysisSchema, handleGitBranchAnalysis,
+  commandListTool, commandListSchema, handleCommandList,
+  commandGetTool, commandGetSchema, handleCommandGet,
+  commandExecuteTool, commandExecuteSchema, handleCommandExecute,
+  commandRescanTool, commandRescanSchema, handleCommandRescan,
+  commandConfigTool, commandConfigSchema, handleCommandConfig,
+  playwrightScreenshotTool, playwrightScreenshotSchema, handlePlaywrightScreenshot,
+  playwrightExtractTool, playwrightExtractSchema, handlePlaywrightExtract,
+  playwrightActionTool, playwrightActionSchema, handlePlaywrightAction,
+  playwrightPdfTool, playwrightPdfSchema, handlePlaywrightPdf
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -541,70 +568,233 @@ function registerTools() {
     (args) => handleLspCheckServer(lspCheckServerSchema.parse(args))
   );
 
-  // 65. context_status
+  // 65. lsp_prepare_rename
+  server.tool(
+    lspPrepareRenameTool.name,
+    lspPrepareRenameSchema.shape,
+    (args) => handleLspPrepareRename(lspPrepareRenameSchema.parse(args))
+  );
+
+  // 66. lsp_rename
+  server.tool(
+    lspRenameTool.name,
+    lspRenameSchema.shape,
+    (args) => handleLspRename(lspRenameSchema.parse(args))
+  );
+
+  // 67. context_status
   server.tool(
     contextStatusTool.name,
     contextStatusSchema.shape,
     (args) => handleContextStatus(contextStatusSchema.parse(args))
   );
 
-  // 66. context_config
+  // 68. context_config
   server.tool(
     contextConfigTool.name,
     contextConfigSchema.shape,
     (args) => handleContextConfig(contextConfigSchema.parse(args))
   );
 
-  // 67. truncator_config
+  // 69. truncator_config
   server.tool(
     truncatorConfigTool.name,
     truncatorConfigSchema.shape,
     (args) => handleTruncatorConfig(truncatorConfigSchema.parse(args))
   );
 
-  // 68. todo_enforcer
+  // 70. todo_enforcer
   server.tool(
     enforcerActionTool.name,
     enforcerActionSchema.shape,
     (args) => handleEnforcerAction(enforcerActionSchema.parse(args))
   );
 
-  // 69. session_recovery
+  // 71. session_recovery
   server.tool(
     sessionRecoveryTool.name,
     sessionRecoverySchema.shape,
     (args) => handleSessionRecovery(sessionRecoverySchema.parse(args))
   );
 
-  // 70. edit_recovery
+  // 72. edit_recovery
   server.tool(
     editRecoveryTool.name,
     editRecoverySchema.shape,
     (args) => handleEditRecovery(editRecoverySchema.parse(args))
   );
 
-  // 71. comment_checker
+  // 73. comment_checker
   server.tool(
     commentCheckerTool.name,
     commentCheckerSchema.shape,
     (args) => handleCommentChecker(commentCheckerSchema.parse(args))
   );
 
-  // 72. directory_injector
+  // 74. directory_injector
   server.tool(
     directoryInjectorTool.name,
     directoryInjectorSchema.shape,
     (args) => handleDirectoryInjector(directoryInjectorSchema.parse(args))
   );
 
-  // 73. magic_keywords
+  // 75. magic_keywords
   server.tool(
     magicKeywordsTool.name,
     magicKeywordsSchema.shape,
     (args) => handleMagicKeywords(magicKeywordsSchema.parse(args))
   );
 
-  logger.info('All tools registered (73 tools)');
+  // 76. grep_app
+  server.tool(
+    grepAppSearchTool.name,
+    grepAppSearchSchema.shape,
+    (args) => handleGrepAppSearch(grepAppSearchSchema.parse(args))
+  );
+
+  // 77. grep_app_languages
+  server.tool(
+    grepAppLanguagesTool.name,
+    grepAppLanguagesSchema.shape,
+    (args) => handleGrepAppLanguages(grepAppLanguagesSchema.parse(args))
+  );
+
+  // 78. session_list
+  server.tool(
+    sessionListTool.name,
+    sessionListSchema.shape,
+    (args) => handleSessionList(sessionListSchema.parse(args))
+  );
+
+  // 79. session_read
+  server.tool(
+    sessionReadTool.name,
+    sessionReadSchema.shape,
+    (args) => handleSessionRead(sessionReadSchema.parse(args))
+  );
+
+  // 80. session_search
+  server.tool(
+    sessionSearchTool.name,
+    sessionSearchSchema.shape,
+    (args) => handleSessionSearch(sessionSearchSchema.parse(args))
+  );
+
+  // 81. session_info
+  server.tool(
+    sessionInfoTool.name,
+    sessionInfoSchema.shape,
+    (args) => handleSessionInfo(sessionInfoSchema.parse(args))
+  );
+
+  // 82. git_atomic_commit
+  server.tool(
+    gitAtomicCommitTool.name,
+    gitAtomicCommitSchema.shape,
+    (args) => handleGitAtomicCommit(gitAtomicCommitSchema.parse(args))
+  );
+
+  // 83. git_history_search
+  server.tool(
+    gitHistorySearchTool.name,
+    gitHistorySearchSchema.shape,
+    (args) => handleGitHistorySearch(gitHistorySearchSchema.parse(args))
+  );
+
+  // 84. git_rebase_planner
+  server.tool(
+    gitRebasePlannerTool.name,
+    gitRebasePlannerSchema.shape,
+    (args) => handleGitRebasePlanner(gitRebasePlannerSchema.parse(args))
+  );
+
+  // 85. git_squash_helper
+  server.tool(
+    gitSquashHelperTool.name,
+    gitSquashHelperSchema.shape,
+    (args) => handleGitSquashHelper(gitSquashHelperSchema.parse(args))
+  );
+
+  // 86. git_branch_analysis
+  server.tool(
+    gitBranchAnalysisTool.name,
+    gitBranchAnalysisSchema.shape,
+    (args) => handleGitBranchAnalysis(gitBranchAnalysisSchema.parse(args))
+  );
+
+  // 87. command_list
+  server.tool(
+    commandListTool.name,
+    commandListSchema.shape,
+    (args) => handleCommandList(commandListSchema.parse(args))
+  );
+
+  // 88. command_get
+  server.tool(
+    commandGetTool.name,
+    commandGetSchema.shape,
+    (args) => handleCommandGet(commandGetSchema.parse(args))
+  );
+
+  // 89. command_execute
+  server.tool(
+    commandExecuteTool.name,
+    commandExecuteSchema.shape,
+    (args) => handleCommandExecute(commandExecuteSchema.parse(args))
+  );
+
+  // 90. command_rescan
+  server.tool(
+    commandRescanTool.name,
+    commandRescanSchema.shape,
+    (args) => handleCommandRescan(commandRescanSchema.parse(args))
+  );
+
+  // 91. command_config
+  server.tool(
+    commandConfigTool.name,
+    commandConfigSchema.shape,
+    (args) => handleCommandConfig(commandConfigSchema.parse(args))
+  );
+
+  // 92. playwright_screenshot
+  server.tool(
+    playwrightScreenshotTool.name,
+    playwrightScreenshotSchema.shape,
+    (args) => handlePlaywrightScreenshot(playwrightScreenshotSchema.parse(args))
+  );
+
+  // 93. playwright_extract
+  server.tool(
+    playwrightExtractTool.name,
+    playwrightExtractSchema.shape,
+    (args) => handlePlaywrightExtract(playwrightExtractSchema.parse(args))
+  );
+
+  // 94. playwright_action
+  server.tool(
+    playwrightActionTool.name,
+    playwrightActionSchema.shape,
+    (args) => handlePlaywrightAction(playwrightActionSchema.parse(args))
+  );
+
+  // 95. playwright_pdf
+  server.tool(
+    playwrightPdfTool.name,
+    playwrightPdfSchema.shape,
+    (args) => handlePlaywrightPdf(playwrightPdfSchema.parse(args))
+  );
+
+  // 96-100. Interactive Bash Tools (5 tools)
+  registerInteractiveBashTools(server);
+
+  // 101-109. Skill Tools (9 tools)
+  registerSkillTools(server);
+
+  // 110-118. MCP Manager Tools (9 tools)
+  registerMcpManagerTools(server);
+
+  logger.info('All tools registered (118 tools)');
 }
 
 // 메인 함수

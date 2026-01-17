@@ -57,7 +57,12 @@ export function loadConfig(overridePort?: number): Config {
       frontend: process.env.MODEL_FRONTEND || 'gemini-2.5-pro',
       writer: process.env.MODEL_WRITER || 'gemini-2.5-flash',
       explorer: process.env.MODEL_EXPLORER || 'gemini-2.5-flash',
-      multimodal: process.env.MODEL_MULTIMODAL || 'gemini-2.5-pro'  // Multimodal analysis
+      multimodal: process.env.MODEL_MULTIMODAL || 'gemini-2.5-pro',  // Multimodal analysis
+      // Planning Agents
+      prometheus: process.env.MODEL_PROMETHEUS || 'claude-sonnet-4-5-20250929',  // Strategic planning
+      metis: process.env.MODEL_METIS || 'gpt-5.2',  // Pre-planning analysis
+      momus: process.env.MODEL_MOMUS || 'gemini-2.5-pro',  // Plan validation
+      librarian: process.env.MODEL_LIBRARIAN || 'claude-sonnet-4-5-20250929'  // Multi-repo analysis
     }
   };
 }
