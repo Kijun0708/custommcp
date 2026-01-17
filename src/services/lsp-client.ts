@@ -318,8 +318,15 @@ export async function findReferences(
       '.'
     ];
 
+    // Debug logging
+    process.stderr.write(`[LSP DEBUG] identifier: ${identifier}\n`);
+    process.stderr.write(`[LSP DEBUG] cwd: ${cwd}\n`);
+    process.stderr.write(`[LSP DEBUG] args: ${JSON.stringify(args)}\n`);
+
     try {
       const stdout = await executeGrep(args, cwd);
+      process.stderr.write(`[LSP DEBUG] stdout length: ${stdout.length}\n`);
+      process.stderr.write(`[LSP DEBUG] stdout preview: ${stdout.substring(0, 200)}\n`);
       const locations: Location[] = [];
       const lines = stdout.trim().split('\n').filter(l => l);
 
