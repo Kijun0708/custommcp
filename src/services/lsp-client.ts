@@ -10,10 +10,29 @@
  * for basic functionality without requiring a full language server connection.
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { join, dirname, resolve as pathResolve, extname } from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Gets the grep command for the current OS
+ * On Windows, uses Git's grep if available
+ */
+function getGrepCommand(): string {
+  if (process.platform !== 'win32') {
+    return 'grep';
+  }
+
+  // Try Git for Windows grep
+  const gitGrepPath = 'C:\\Program Files\\Git\\usr\\bin\\grep.exe';
+  if (existsSync(gitGrepPath)) {
+    return `"${gitGrepPath}"`;
+  }
+
+  // Fallback to hoping grep is in PATH (e.g., via Git Bash)
+  return 'grep';
+}
 
 /**
  * Position in a document
@@ -244,7 +263,8 @@ export async function findReferences(
         '.'
       ];
 
-      const child = spawn('grep', args, {
+      const grepCmd = getGrepCommand();
+      const child = spawn(grepCmd, args, {
         cwd,
         shell: true,
         stdio: ['ignore', 'pipe', 'pipe']
@@ -439,7 +459,8 @@ export async function findWorkspaceSymbols(
         '.'
       ];
 
-      const child = spawn('grep', args, {
+      const grepCmd = getGrepCommand();
+      const child = spawn(grepCmd, args, {
         cwd: searchPath,
         shell: true,
         stdio: ['ignore', 'pipe', 'pipe']
@@ -700,7 +721,8 @@ export async function performRename(
         '.'
       ];
 
-      const child = spawn('grep', args, {
+      const grepCmd = getGrepCommand();
+      const child = spawn(grepCmd, args, {
         cwd,
         shell: true,
         stdio: ['ignore', 'pipe', 'pipe']
