@@ -43,13 +43,14 @@ function executeGrep(args: string[], cwd: string, timeoutMs: number = 30000): Pr
   // Remove quotes from pattern args for direct spawn
   const cleanArgs = args.map(arg => arg.replace(/^"(.*)"$/, '$1'));
 
+  // Replace '.' with the actual cwd path for Windows compatibility
+  const finalArgs = cleanArgs.map(arg => arg === '.' ? cwd : arg);
+
   return new Promise((resolve, reject) => {
-    // Use spawn directly with full path (works on both Windows and Unix)
-    const child = spawn(cmd, cleanArgs, {
+    const child = spawn(cmd, finalArgs, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
-      // Don't use shell on Windows to avoid escaping issues
-      shell: !useExec
+      shell: false
     });
 
     let stdout = '';
