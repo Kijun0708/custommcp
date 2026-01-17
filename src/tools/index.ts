@@ -77,3 +77,32 @@ export {
   ensemblePresetTool, ensemblePresetSchema, handleEnsemblePreset,
   ensemblePresetsListTool, ensemblePresetsListSchema, handleEnsemblePresetsList
 } from './ensemble.js';
+export {
+  astGrepSearchTool, astGrepSearchSchema, handleAstGrepSearch,
+  astGrepReplaceTool, astGrepReplaceSchema, handleAstGrepReplace,
+  astGrepLanguagesTool, astGrepLanguagesSchema, handleAstGrepLanguages
+} from './ast-grep.js';
+export {
+  lspGetDefinitionTool, lspGetDefinitionSchema, handleLspGetDefinition,
+  lspGetReferencesTool, lspGetReferencesSchema, handleLspGetReferences,
+  lspGetHoverTool, lspGetHoverSchema, handleLspGetHover,
+  lspWorkspaceSymbolsTool, lspWorkspaceSymbolsSchema, handleLspWorkspaceSymbols,
+  lspCheckServerTool, lspCheckServerSchema, handleLspCheckServer
+} from './lsp.js';
+export {
+  contextStatusTool, contextStatusSchema, handleContextStatus,
+  contextConfigTool, contextConfigSchema, handleContextConfig,
+  truncatorConfigTool, truncatorConfigSchema, handleTruncatorConfig,
+  enforcerActionTool, enforcerActionSchema, handleEnforcerAction
+} from './context-management.js';
+export {
+  sessionRecoveryTool, sessionRecoverySchema, handleSessionRecovery,
+  editRecoveryTool, editRecoverySchema, handleEditRecovery,
+  commentCheckerTool, commentCheckerSchema, handleCommentChecker
+} from './stability-management.js';
+export {
+  directoryInjectorTool, directoryInjectorSchema, handleDirectoryInjector
+} from './directory-injector.js';
+export {
+  magicKeywordsTool, magicKeywordsSchema, handleMagicKeywords
+} from './magic-keywords.js';

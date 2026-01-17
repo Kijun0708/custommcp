@@ -65,7 +65,24 @@ import {
   costSystemToggleTool, costSystemToggleSchema, handleCostSystemToggle,
   ensembleQueryTool, ensembleQuerySchema, handleEnsembleQuery,
   ensemblePresetTool, ensemblePresetSchema, handleEnsemblePreset,
-  ensemblePresetsListTool, ensemblePresetsListSchema, handleEnsemblePresetsList
+  ensemblePresetsListTool, ensemblePresetsListSchema, handleEnsemblePresetsList,
+  astGrepSearchTool, astGrepSearchSchema, handleAstGrepSearch,
+  astGrepReplaceTool, astGrepReplaceSchema, handleAstGrepReplace,
+  astGrepLanguagesTool, astGrepLanguagesSchema, handleAstGrepLanguages,
+  lspGetDefinitionTool, lspGetDefinitionSchema, handleLspGetDefinition,
+  lspGetReferencesTool, lspGetReferencesSchema, handleLspGetReferences,
+  lspGetHoverTool, lspGetHoverSchema, handleLspGetHover,
+  lspWorkspaceSymbolsTool, lspWorkspaceSymbolsSchema, handleLspWorkspaceSymbols,
+  lspCheckServerTool, lspCheckServerSchema, handleLspCheckServer,
+  contextStatusTool, contextStatusSchema, handleContextStatus,
+  contextConfigTool, contextConfigSchema, handleContextConfig,
+  truncatorConfigTool, truncatorConfigSchema, handleTruncatorConfig,
+  enforcerActionTool, enforcerActionSchema, handleEnforcerAction,
+  sessionRecoveryTool, sessionRecoverySchema, handleSessionRecovery,
+  editRecoveryTool, editRecoverySchema, handleEditRecovery,
+  commentCheckerTool, commentCheckerSchema, handleCommentChecker,
+  directoryInjectorTool, directoryInjectorSchema, handleDirectoryInjector,
+  magicKeywordsTool, magicKeywordsSchema, handleMagicKeywords
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -468,7 +485,126 @@ function registerTools() {
     () => handleEnsemblePresetsList()
   );
 
-  logger.info('All tools registered (56 tools)');
+  // 57. ast_grep_search
+  server.tool(
+    astGrepSearchTool.name,
+    astGrepSearchSchema.shape,
+    (args) => handleAstGrepSearch(astGrepSearchSchema.parse(args))
+  );
+
+  // 58. ast_grep_replace
+  server.tool(
+    astGrepReplaceTool.name,
+    astGrepReplaceSchema.shape,
+    (args) => handleAstGrepReplace(astGrepReplaceSchema.parse(args))
+  );
+
+  // 59. ast_grep_languages
+  server.tool(
+    astGrepLanguagesTool.name,
+    astGrepLanguagesSchema.shape,
+    () => handleAstGrepLanguages()
+  );
+
+  // 60. lsp_get_definition
+  server.tool(
+    lspGetDefinitionTool.name,
+    lspGetDefinitionSchema.shape,
+    (args) => handleLspGetDefinition(lspGetDefinitionSchema.parse(args))
+  );
+
+  // 61. lsp_get_references
+  server.tool(
+    lspGetReferencesTool.name,
+    lspGetReferencesSchema.shape,
+    (args) => handleLspGetReferences(lspGetReferencesSchema.parse(args))
+  );
+
+  // 62. lsp_get_hover
+  server.tool(
+    lspGetHoverTool.name,
+    lspGetHoverSchema.shape,
+    (args) => handleLspGetHover(lspGetHoverSchema.parse(args))
+  );
+
+  // 63. lsp_workspace_symbols
+  server.tool(
+    lspWorkspaceSymbolsTool.name,
+    lspWorkspaceSymbolsSchema.shape,
+    (args) => handleLspWorkspaceSymbols(lspWorkspaceSymbolsSchema.parse(args))
+  );
+
+  // 64. lsp_check_server
+  server.tool(
+    lspCheckServerTool.name,
+    lspCheckServerSchema.shape,
+    (args) => handleLspCheckServer(lspCheckServerSchema.parse(args))
+  );
+
+  // 65. context_status
+  server.tool(
+    contextStatusTool.name,
+    contextStatusSchema.shape,
+    (args) => handleContextStatus(contextStatusSchema.parse(args))
+  );
+
+  // 66. context_config
+  server.tool(
+    contextConfigTool.name,
+    contextConfigSchema.shape,
+    (args) => handleContextConfig(contextConfigSchema.parse(args))
+  );
+
+  // 67. truncator_config
+  server.tool(
+    truncatorConfigTool.name,
+    truncatorConfigSchema.shape,
+    (args) => handleTruncatorConfig(truncatorConfigSchema.parse(args))
+  );
+
+  // 68. todo_enforcer
+  server.tool(
+    enforcerActionTool.name,
+    enforcerActionSchema.shape,
+    (args) => handleEnforcerAction(enforcerActionSchema.parse(args))
+  );
+
+  // 69. session_recovery
+  server.tool(
+    sessionRecoveryTool.name,
+    sessionRecoverySchema.shape,
+    (args) => handleSessionRecovery(sessionRecoverySchema.parse(args))
+  );
+
+  // 70. edit_recovery
+  server.tool(
+    editRecoveryTool.name,
+    editRecoverySchema.shape,
+    (args) => handleEditRecovery(editRecoverySchema.parse(args))
+  );
+
+  // 71. comment_checker
+  server.tool(
+    commentCheckerTool.name,
+    commentCheckerSchema.shape,
+    (args) => handleCommentChecker(commentCheckerSchema.parse(args))
+  );
+
+  // 72. directory_injector
+  server.tool(
+    directoryInjectorTool.name,
+    directoryInjectorSchema.shape,
+    (args) => handleDirectoryInjector(directoryInjectorSchema.parse(args))
+  );
+
+  // 73. magic_keywords
+  server.tool(
+    magicKeywordsTool.name,
+    magicKeywordsSchema.shape,
+    (args) => handleMagicKeywords(magicKeywordsSchema.parse(args))
+  );
+
+  logger.info('All tools registered (73 tools)');
 }
 
 // 메인 함수
