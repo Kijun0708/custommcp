@@ -17,6 +17,10 @@ Claude Code가 팀 리더 역할을 하며, 특정 작업에 맞는 AI 전문가
 | `writer` | Gemini Flash | 기술 문서 작성 | explorer |
 | `explorer` | Gemini Flash | 빠른 검색, 간단한 쿼리 | - |
 | `multimodal` | GPT 5.2 | 이미지 분석, 시각적 콘텐츠 | strategist → researcher |
+| `librarian` | Claude Sonnet | 지식 관리, 세션 히스토리 검색 | researcher → explorer |
+| `metis` | GPT 5.2 | 전략적 계획, 복잡한 문제 분해 | strategist → researcher |
+| `momus` | Gemini Pro | 비판적 분석, 품질 평가 | reviewer → explorer |
+| `prometheus` | Claude Sonnet | 창의적 솔루션, 혁신적 접근 | strategist → researcher |
 
 ## 주요 기능
 
@@ -92,10 +96,81 @@ API 비용 추적 및 예산 관리:
 - 프로바이더/전문가/모델별 통계
 
 ### Hook System
-이벤트 기반 확장 시스템:
+이벤트 기반 확장 시스템 (106개 훅):
 - 도구 호출 전/후 인터셉트
 - 전문가 호출 전/후 인터셉트
 - 외부 쉘 명령 훅 지원
+
+### Interactive Bash (Tmux)
+대화형 터미널 세션 관리:
+- **세션 생성**: tmux 기반 영구 세션
+- **명령 실행**: 출력 캡처 및 타임아웃 관리
+- **세션 관리**: 목록 조회, 종료, 출력 읽기
+
+### Skill System
+YAML/JSON/MD 기반 스킬 정의 및 실행:
+- **스킬 로드**: 프로젝트/사용자/전역 스코프 지원
+- **MCP 프로세스**: 스킬별 MCP 서버 자동 관리
+- **동적 실행**: 컨텍스트 변수 치환
+
+### MCP Server Manager
+Claude Code 호환 MCP 서버 설정 관리:
+- **설정 로드**: `claude_desktop_config.json` 호환
+- **서버 관리**: 시작/중지/상태 확인
+- **다중 스코프**: 프로젝트/사용자/전역 설정
+
+### Git Master
+고급 Git 작업 도구:
+- **Atomic Commit**: 변경사항 자동 그룹화 및 커밋
+- **History Search**: 커밋 메시지/diff 검색
+- **Rebase Planner**: 충돌 예측 및 계획 수립
+- **Squash Helper**: 커밋 병합 미리보기
+- **Branch Analysis**: 브랜치 비교 및 분석
+
+### Playwright
+브라우저 자동화 및 웹 스크래핑:
+- **Screenshot**: 웹 페이지 캡처
+- **PDF 변환**: 웹 페이지를 PDF로 저장
+- **콘텐츠 추출**: 텍스트/HTML/마크다운/링크/이미지
+- **액션 실행**: 클릭, 입력, 스크롤 등
+
+### Grep.app Integration
+공개 코드 검색 (GitHub/GitLab):
+- **코드 패턴 검색**: 정규식 지원
+- **언어 필터**: 특정 프로그래밍 언어로 필터링
+- **레포지토리 필터**: 특정 저장소 검색
+
+### Session Transcript
+과거 세션 기록 조회:
+- **세션 목록**: 프로젝트별 필터링
+- **세션 읽기**: 메시지 히스토리 조회
+- **세션 검색**: 키워드로 검색
+
+### Command Discovery
+프로젝트 명령어 자동 발견:
+- **스캔 위치**: package.json, Makefile, scripts/
+- **명령 실행**: 발견된 명령어 실행
+- **태그 필터**: 카테고리별 필터링
+
+### Advanced Hooks (Phase 1-4)
+
+#### Core Hooks
+- **Rules Injector**: `.claude/rules/` 규칙 자동 주입
+- **Think Mode**: 확장 사고 프로세스 활성화
+- **Auto Slash Command**: 슬래시 명령 자동 실행
+- **Sisyphus Orchestrator**: 반복 작업 패턴 감지
+
+#### Stability Hooks
+- **Anthropic Context Recovery**: 컨텍스트 에러 자동 복구
+- **Non-Interactive Env**: 비대화형 환경 안전 처리
+- **Start Work**: 세션 체크포인트 및 복원
+- **Task Resume Info**: 재개 정보 자동 추출
+
+#### UX Hooks
+- **Auto Update Checker**: 버전 업데이트 알림
+- **Task Toast Manager**: 토스트 스타일 알림
+- **Hook Message Injector**: 메시지 큐 주입
+- **Prometheus MD Only**: 마크다운 포맷 강제
 
 ## 설치
 
@@ -308,6 +383,81 @@ MCP 연동 후 각 AI 프로바이더 OAuth 인증:
 | `boulder_recover` | 볼더 복구 |
 | `boulder_detail` | 볼더 상세 정보 |
 
+### Interactive Bash (Tmux)
+| 도구 | 설명 |
+|------|------|
+| `interactive_bash_create` | 대화형 세션 생성 |
+| `interactive_bash_send` | 명령어 전송 |
+| `interactive_bash_read` | 세션 출력 읽기 |
+| `interactive_bash_list` | 세션 목록 |
+| `interactive_bash_kill` | 세션 종료 |
+
+### Skill System
+| 도구 | 설명 |
+|------|------|
+| `skill_list` | 스킬 목록 조회 |
+| `skill_get` | 스킬 상세 정보 |
+| `skill_execute` | 스킬 실행 |
+| `skill_activate` | 스킬 활성화 |
+| `skill_deactivate` | 스킬 비활성화 |
+| `skill_reload` | 스킬 새로고침 |
+| `skill_stats` | 스킬 통계 |
+| `skill_mcp_start` | 스킬 MCP 시작 |
+| `skill_mcp_stop` | 스킬 MCP 중지 |
+
+### MCP Server Manager
+| 도구 | 설명 |
+|------|------|
+| `mcp_server_list` | MCP 서버 목록 |
+| `mcp_server_get` | 서버 상세 정보 |
+| `mcp_server_start` | 서버 시작 |
+| `mcp_server_stop` | 서버 중지 |
+| `mcp_server_restart` | 서버 재시작 |
+| `mcp_server_status` | 서버 상태 |
+| `mcp_server_logs` | 서버 로그 |
+| `mcp_config_reload` | 설정 새로고침 |
+| `mcp_config_stats` | 설정 통계 |
+
+### Git Master
+| 도구 | 설명 |
+|------|------|
+| `git_atomic_commit` | 변경사항 분석 및 atomic 커밋 |
+| `git_history_search` | 커밋 히스토리 검색 |
+| `git_rebase_planner` | 리베이스 계획 수립 |
+| `git_squash_helper` | 커밋 스쿼시 도우미 |
+| `git_branch_analysis` | 브랜치 분석 |
+
+### Playwright
+| 도구 | 설명 |
+|------|------|
+| `playwright_screenshot` | 웹 페이지 스크린샷 |
+| `playwright_extract` | 콘텐츠 추출 |
+| `playwright_action` | 브라우저 액션 실행 |
+| `playwright_pdf` | PDF 생성 |
+
+### Grep.app
+| 도구 | 설명 |
+|------|------|
+| `grep_app` | 공개 코드 검색 |
+| `grep_app_languages` | 지원 언어 목록 |
+
+### Session Transcript
+| 도구 | 설명 |
+|------|------|
+| `session_list` | 세션 목록 조회 |
+| `session_read` | 세션 내용 읽기 |
+| `session_search` | 세션 검색 |
+| `session_info` | 세션 정보 |
+
+### Command Discovery
+| 도구 | 설명 |
+|------|------|
+| `command_list` | 명령어 목록 |
+| `command_get` | 명령어 상세 정보 |
+| `command_execute` | 명령어 실행 |
+| `command_rescan` | 명령어 재스캔 |
+| `command_config` | 명령어 설정 |
+
 ## 사용 예시
 
 ### 전문가 상담
@@ -351,6 +501,39 @@ MCP 연동 후 각 AI 프로바이더 OAuth 인증:
 "전문가들 토론시켜줘"           → ensemble_query (debate)
 ```
 
+### Interactive Bash
+```
+"터미널 세션 만들어줘"          → interactive_bash_create
+"npm run dev 실행해"           → interactive_bash_send
+"세션 출력 보여줘"              → interactive_bash_read
+```
+
+### Git Master
+```
+"변경사항 atomic 커밋해줘"       → git_atomic_commit
+"'authentication' 관련 커밋 찾아" → git_history_search
+"최근 5개 커밋 스쿼시 미리보기"   → git_squash_helper
+```
+
+### Playwright
+```
+"https://example.com 스크린샷"   → playwright_screenshot
+"이 페이지 PDF로 저장"          → playwright_pdf
+"페이지에서 링크 추출해줘"       → playwright_extract
+```
+
+### Skill System
+```
+"등록된 스킬 보여줘"            → skill_list
+"commit 스킬 실행해"           → skill_execute
+```
+
+### Session Transcript
+```
+"이전 세션 기록 보여줘"         → session_list
+"어제 작업 내용 검색해줘"        → session_search
+```
+
 ## 기술 스택
 
 - **Language**: TypeScript
@@ -359,6 +542,15 @@ MCP 연동 후 각 AI 프로바이더 OAuth 인증:
 - **Validation**: Zod
 - **Logging**: pino
 - **Caching**: lru-cache
+
+## 프로젝트 통계
+
+| 항목 | 수량 |
+|------|------|
+| MCP 도구 | 118개 |
+| 훅 | 106개 (101 내장 + 5 외부) |
+| 전문가 | 11개 |
+| 기능 모듈 | 15+ |
 
 ## 라이선스
 
