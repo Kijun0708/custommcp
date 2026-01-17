@@ -40,72 +40,42 @@ function getGrepCommand(): { cmd: string; useExec: boolean } {
 function executeGrep(args: string[], cwd: string, timeoutMs: number = 30000): Promise<string> {
   const { cmd, useExec } = getGrepCommand();
 
+  // Remove quotes from pattern args for direct spawn
+  const cleanArgs = args.map(arg => arg.replace(/^"(.*)"$/, '$1'));
+
   return new Promise((resolve, reject) => {
-    if (useExec) {
-      // On Windows with Git grep, use exec with full command string
-      const fullCmd = `"${cmd}" ${args.join(' ')}`;
-      const child = spawn('cmd.exe', ['/c', fullCmd], {
-        cwd,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+    // Use spawn directly with full path (works on both Windows and Unix)
+    const child = spawn(cmd, cleanArgs, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Don't use shell on Windows to avoid escaping issues
+      shell: !useExec
+    });
 
-      let stdout = '';
-      let stderr = '';
+    let stdout = '';
+    let stderr = '';
 
-      child.stdout.on('data', (data) => { stdout += data.toString(); });
-      child.stderr.on('data', (data) => { stderr += data.toString(); });
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
 
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error('Search timed out'));
-      }, timeoutMs);
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('Search timed out'));
+    }, timeoutMs);
 
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        if (code !== 0 && code !== 1) {
-          reject(new Error(stderr || 'grep failed'));
-        } else {
-          resolve(stdout);
-        }
-      });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0 && code !== 1) {
+        reject(new Error(stderr || 'grep failed'));
+      } else {
+        resolve(stdout);
+      }
+    });
 
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    } else {
-      // On Unix, use spawn directly
-      const child = spawn(cmd, args, {
-        cwd,
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data) => { stdout += data.toString(); });
-      child.stderr.on('data', (data) => { stderr += data.toString(); });
-
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error('Search timed out'));
-      }, timeoutMs);
-
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        if (code !== 0 && code !== 1) {
-          reject(new Error(stderr || 'grep failed'));
-        } else {
-          resolve(stdout);
-        }
-      });
-
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    }
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 
@@ -333,7 +303,7 @@ export async function findReferences(
       '--include=*.js',
       '--include=*.jsx',
       '-E',
-      `"\\b${identifier}\\b"`,
+      `\\b${identifier}\\b`,
       '.'
     ];
 
@@ -489,7 +459,7 @@ export async function findWorkspaceSymbols(
   try {
     // Use grep to find symbol definitions
     // Search for function, class, interface, type, const definitions
-    const pattern = `"(function|class|interface|type|const|let|var)\\s+[a-zA-Z_$][a-zA-Z0-9_$]*"`;
+    const pattern = `(function|class|interface|type|const|let|var)\\s+[a-zA-Z_$][a-zA-Z0-9_$]*`;
 
     const args = [
       '-rn',
@@ -734,7 +704,7 @@ export async function performRename(
       '--include=*.js',
       '--include=*.jsx',
       '-E',
-      `"\\b${oldName}\\b"`,
+      `\\b${oldName}\\b`,
       '.'
     ];
 
