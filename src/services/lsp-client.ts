@@ -536,9 +536,13 @@ export async function checkLanguageServerAvailability(language: string): Promise
     return { available: false, error: `No known language server for ${language}` };
   }
 
+  // Use 'where' on Windows, 'which' on Unix
+  const isWindows = process.platform === 'win32';
+  const checkCommand = isWindows ? 'where' : 'which';
+
   for (const server of servers) {
     try {
-      const child = spawn('which', [server], { shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(checkCommand, [server], { shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
 
       const available = await new Promise<boolean>((resolve) => {
         child.on('close', (code) => resolve(code === 0));
