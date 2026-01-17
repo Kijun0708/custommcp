@@ -19,19 +19,94 @@ import { logger } from '../utils/logger.js';
  * Gets the grep command for the current OS
  * On Windows, uses Git's grep if available
  */
-function getGrepCommand(): string {
+function getGrepCommand(): { cmd: string; useExec: boolean } {
   if (process.platform !== 'win32') {
-    return 'grep';
+    return { cmd: 'grep', useExec: false };
   }
 
   // Try Git for Windows grep
   const gitGrepPath = 'C:\\Program Files\\Git\\usr\\bin\\grep.exe';
   if (existsSync(gitGrepPath)) {
-    return `"${gitGrepPath}"`;
+    return { cmd: gitGrepPath, useExec: true };
   }
 
   // Fallback to hoping grep is in PATH (e.g., via Git Bash)
-  return 'grep';
+  return { cmd: 'grep', useExec: false };
+}
+
+/**
+ * Executes grep command and returns stdout
+ */
+function executeGrep(args: string[], cwd: string, timeoutMs: number = 30000): Promise<string> {
+  const { cmd, useExec } = getGrepCommand();
+
+  return new Promise((resolve, reject) => {
+    if (useExec) {
+      // On Windows with Git grep, use exec with full command string
+      const fullCmd = `"${cmd}" ${args.join(' ')}`;
+      const child = spawn('cmd.exe', ['/c', fullCmd], {
+        cwd,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => { stdout += data.toString(); });
+      child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('Search timed out'));
+      }, timeoutMs);
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code !== 0 && code !== 1) {
+          reject(new Error(stderr || 'grep failed'));
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    } else {
+      // On Unix, use spawn directly
+      const child = spawn(cmd, args, {
+        cwd,
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => { stdout += data.toString(); });
+      child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('Search timed out'));
+      }, timeoutMs);
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code !== 0 && code !== 1) {
+          reject(new Error(stderr || 'grep failed'));
+        } else {
+          resolve(stdout);
+        }
+      });
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    }
+  });
 }
 
 /**
@@ -251,76 +326,45 @@ export async function findReferences(
     // Use grep to find all references
     const cwd = searchPath || dirname(filePath);
 
-    return new Promise((resolve) => {
-      const args = [
-        '-rn',
-        '--include=*.ts',
-        '--include=*.tsx',
-        '--include=*.js',
-        '--include=*.jsx',
-        '-E',
-        `\\b${identifier}\\b`,
-        '.'
-      ];
+    const args = [
+      '-rn',
+      '--include=*.ts',
+      '--include=*.tsx',
+      '--include=*.js',
+      '--include=*.jsx',
+      '-E',
+      `"\\b${identifier}\\b"`,
+      '.'
+    ];
 
-      const grepCmd = getGrepCommand();
-      const child = spawn(grepCmd, args, {
-        cwd,
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+    try {
+      const stdout = await executeGrep(args, cwd);
+      const locations: Location[] = [];
+      const lines = stdout.trim().split('\n').filter(l => l);
 
-      let stdout = '';
-      let stderr = '';
+      for (const line of lines) {
+        // Format: filepath:linenum:content
+        const match = line.match(/^([^:]+):(\d+):(.*)$/);
+        if (match) {
+          const [, file, lineNum, content] = match;
+          const lineIndex = parseInt(lineNum, 10) - 1;
+          const col = content.indexOf(identifier);
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code !== 0 && code !== 1) {
-          resolve({ success: false, locations: [], error: stderr || 'grep failed' });
-          return;
+          locations.push({
+            uri: `file://${pathResolve(cwd, file).replace(/\\/g, '/')}`,
+            range: {
+              start: { line: lineIndex, character: col >= 0 ? col : 0 },
+              end: { line: lineIndex, character: col >= 0 ? col + identifier.length : content.length }
+            }
+          });
         }
+      }
 
-        const locations: Location[] = [];
-        const lines = stdout.trim().split('\n').filter(l => l);
-
-        for (const line of lines) {
-          // Format: filepath:linenum:content
-          const match = line.match(/^([^:]+):(\d+):(.*)$/);
-          if (match) {
-            const [, file, lineNum, content] = match;
-            const lineIndex = parseInt(lineNum, 10) - 1;
-            const col = content.indexOf(identifier);
-
-            locations.push({
-              uri: `file://${pathResolve(cwd, file).replace(/\\/g, '/')}`,
-              range: {
-                start: { line: lineIndex, character: col >= 0 ? col : 0 },
-                end: { line: lineIndex, character: col >= 0 ? col + identifier.length : content.length }
-              }
-            });
-          }
-        }
-
-        resolve({ success: true, locations });
-      });
-
-      child.on('error', (error) => {
-        resolve({ success: false, locations: [], error: error.message });
-      });
-
-      // Timeout
-      setTimeout(() => {
-        child.kill();
-        resolve({ success: false, locations: [], error: 'Search timed out' });
-      }, 30000);
-    });
+      return { success: true, locations };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { success: false, locations: [], error: errorMessage };
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { success: false, locations: [], error: errorMessage };
@@ -444,91 +488,65 @@ export async function findWorkspaceSymbols(
 ): Promise<WorkspaceSymbolsResult> {
   try {
     // Use grep to find symbol definitions
-    return new Promise((resolve) => {
-      // Search for function, class, interface, type, const definitions
-      const pattern = `(function|class|interface|type|const|let|var)\\s+[a-zA-Z_$][a-zA-Z0-9_$]*`;
+    // Search for function, class, interface, type, const definitions
+    const pattern = `"(function|class|interface|type|const|let|var)\\s+[a-zA-Z_$][a-zA-Z0-9_$]*"`;
 
-      const args = [
-        '-rn',
-        '--include=*.ts',
-        '--include=*.tsx',
-        '--include=*.js',
-        '--include=*.jsx',
-        '-E',
-        pattern,
-        '.'
-      ];
+    const args = [
+      '-rn',
+      '--include=*.ts',
+      '--include=*.tsx',
+      '--include=*.js',
+      '--include=*.jsx',
+      '-E',
+      pattern,
+      '.'
+    ];
 
-      const grepCmd = getGrepCommand();
-      const child = spawn(grepCmd, args, {
-        cwd: searchPath,
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+    const stdout = await executeGrep(args, searchPath);
+    const symbols: SymbolInfo[] = [];
+    const lines = stdout.trim().split('\n').filter(l => l);
 
-      let stdout = '';
+    for (const line of lines) {
+      const match = line.match(/^([^:]+):(\d+):(.*)$/);
+      if (match) {
+        const [, file, lineNum, content] = match;
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+        // Extract symbol name
+        const symbolMatch = content.match(
+          /(function|class|interface|type|const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/
+        );
 
-      child.on('close', () => {
-        const symbols: SymbolInfo[] = [];
-        const lines = stdout.trim().split('\n').filter(l => l);
+        if (symbolMatch) {
+          const [, kind, name] = symbolMatch;
 
-        for (const line of lines) {
-          const match = line.match(/^([^:]+):(\d+):(.*)$/);
-          if (match) {
-            const [, file, lineNum, content] = match;
-
-            // Extract symbol name
-            const symbolMatch = content.match(
-              /(function|class|interface|type|const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/
-            );
-
-            if (symbolMatch) {
-              const [, kind, name] = symbolMatch;
-
-              // Filter by query
-              if (query && !name.toLowerCase().includes(query.toLowerCase())) {
-                continue;
-              }
-
-              const lineIndex = parseInt(lineNum, 10) - 1;
-              const col = content.indexOf(name);
-
-              symbols.push({
-                name,
-                kind: kind === 'const' || kind === 'let' || kind === 'var' ? 'Variable' :
-                      kind === 'function' ? 'Function' :
-                      kind === 'class' ? 'Class' :
-                      kind === 'interface' ? 'Interface' : 'Type',
-                location: {
-                  uri: `file://${pathResolve(searchPath, file).replace(/\\/g, '/')}`,
-                  range: {
-                    start: { line: lineIndex, character: col >= 0 ? col : 0 },
-                    end: { line: lineIndex, character: col >= 0 ? col + name.length : content.length }
-                  }
-                }
-              });
-            }
+          // Filter by query
+          if (query && !name.toLowerCase().includes(query.toLowerCase())) {
+            continue;
           }
+
+          const lineIndex = parseInt(lineNum, 10) - 1;
+          const col = content.indexOf(name);
+
+          symbols.push({
+            name,
+            kind: kind === 'const' || kind === 'let' || kind === 'var' ? 'Variable' :
+                  kind === 'function' ? 'Function' :
+                  kind === 'class' ? 'Class' :
+                  kind === 'interface' ? 'Interface' : 'Type',
+            location: {
+              uri: `file://${pathResolve(searchPath, file).replace(/\\/g, '/')}`,
+              range: {
+                start: { line: lineIndex, character: col >= 0 ? col : 0 },
+                end: { line: lineIndex, character: col >= 0 ? col + name.length : content.length }
+              }
+            }
+          });
         }
+      }
+    }
 
-        // Limit results
-        resolve({ success: true, symbols: symbols.slice(0, 100) });
-      });
-
-      child.on('error', (error) => {
-        resolve({ success: false, symbols: [], error: error.message });
-      });
-
-      // Timeout
-      setTimeout(() => {
-        child.kill();
-        resolve({ success: false, symbols: [], error: 'Search timed out' });
-      }, 30000);
-    });
+    // Limit results
+    return { success: true, symbols: symbols.slice(0, 100) };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { success: false, symbols: [], error: errorMessage };
@@ -709,83 +727,48 @@ export async function performRename(
     const changes: { [uri: string]: TextEdit[] } = {};
 
     // Find all references using grep
-    return new Promise((resolve) => {
-      const args = [
-        '-rn',
-        '--include=*.ts',
-        '--include=*.tsx',
-        '--include=*.js',
-        '--include=*.jsx',
-        '-E',
-        `\\b${oldName}\\b`,
-        '.'
-      ];
+    const args = [
+      '-rn',
+      '--include=*.ts',
+      '--include=*.tsx',
+      '--include=*.js',
+      '--include=*.jsx',
+      '-E',
+      `"\\b${oldName}\\b"`,
+      '.'
+    ];
 
-      const grepCmd = getGrepCommand();
-      const child = spawn(grepCmd, args, {
-        cwd,
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+    const stdout = await executeGrep(args, cwd);
+    const lines = stdout.trim().split('\n').filter(l => l);
 
-      let stdout = '';
-      let stderr = '';
+    for (const line of lines) {
+      const match = line.match(/^([^:]+):(\d+):(.*)$/);
+      if (match) {
+        const [, file, lineNum, lineContent] = match;
+        const lineIndex = parseInt(lineNum, 10) - 1;
+        const fullPath = pathResolve(cwd, file);
+        const uri = `file://${fullPath.replace(/\\/g, '/')}`;
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code !== 0 && code !== 1) {
-          resolve({ success: false, changes: {}, error: stderr || 'grep failed' });
-          return;
+        if (!changes[uri]) {
+          changes[uri] = [];
         }
 
-        const lines = stdout.trim().split('\n').filter(l => l);
-
-        for (const line of lines) {
-          const match = line.match(/^([^:]+):(\d+):(.*)$/);
-          if (match) {
-            const [, file, lineNum, lineContent] = match;
-            const lineIndex = parseInt(lineNum, 10) - 1;
-            const fullPath = pathResolve(cwd, file);
-            const uri = `file://${fullPath.replace(/\\/g, '/')}`;
-
-            if (!changes[uri]) {
-              changes[uri] = [];
-            }
-
-            // Find all occurrences of the identifier in the line
-            const regex = new RegExp(`\\b${oldName}\\b`, 'g');
-            let m;
-            while ((m = regex.exec(lineContent)) !== null) {
-              changes[uri].push({
-                range: {
-                  start: { line: lineIndex, character: m.index },
-                  end: { line: lineIndex, character: m.index + oldName.length }
-                },
-                newText: newName
-              });
-            }
-          }
+        // Find all occurrences of the identifier in the line
+        const regex = new RegExp(`\\b${oldName}\\b`, 'g');
+        let m;
+        while ((m = regex.exec(lineContent)) !== null) {
+          changes[uri].push({
+            range: {
+              start: { line: lineIndex, character: m.index },
+              end: { line: lineIndex, character: m.index + oldName.length }
+            },
+            newText: newName
+          });
         }
+      }
+    }
 
-        resolve({ success: true, changes });
-      });
-
-      child.on('error', (error) => {
-        resolve({ success: false, changes: {}, error: error.message });
-      });
-
-      setTimeout(() => {
-        child.kill();
-        resolve({ success: false, changes: {}, error: 'Search timed out' });
-      }, 30000);
-    });
+    return { success: true, changes };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { success: false, changes: {}, error: errorMessage };
