@@ -16,8 +16,9 @@ import {
   updateTruncatorConfig,
   getEnforcerStats,
   resetEnforcerState,
-  clearIncompleteItems,
-  markItemComplete
+  clearTodos,
+  updateTodoStatus,
+  getTrackedTodos
 } from '../hooks/builtin/index.js';
 
 /**
@@ -271,30 +272,31 @@ export async function handleEnforcerAction(params: EnforcerActionParams) {
   switch (params.action) {
     case 'status': {
       const stats = getEnforcerStats();
+      const todos = getTrackedTodos();
 
-      if (stats.incompleteCount === 0) {
+      if (stats.pendingTodoCount === 0) {
         return {
           content: [{
             type: "text" as const,
-            text: `## 미완료 작업 상태\n\n✅ 감지된 미완료 항목이 없습니다.\n\n**분석된 응답**: ${stats.responsesAnalyzed}개\n**발송된 알림**: ${stats.reminderCount}회`
+            text: `## 미완료 작업 상태\n\n✅ 감지된 미완료 항목이 없습니다.\n\n**분석된 응답**: ${stats.responsesAnalyzed}개\n**연속 실행 횟수**: ${stats.continuationCount}회`
           }]
         };
       }
 
-      const itemsList = stats.items.map((item, i) =>
-        `${i + 1}. \`${item.pattern}\`\n   - 컨텍스트: "${item.context.substring(0, 60)}..."\n   - 신뢰도: ${(item.confidence * 100).toFixed(0)}%\n   - 소스: ${item.source}`
+      const itemsList = todos.map((item, i) =>
+        `${i + 1}. [${item.status}] ${item.content}\n   - 신뢰도: ${(item.confidence * 100).toFixed(0)}%\n   - 소스: ${item.source}`
       ).join('\n');
 
       return {
         content: [{
           type: "text" as const,
-          text: `## 미완료 작업 상태\n\n**감지된 항목**: ${stats.incompleteCount}개\n**분석된 응답**: ${stats.responsesAnalyzed}개\n\n### 항목 목록\n${itemsList}\n\n_완료하려면 \`todo_enforcer action=complete item_index=N\` 사용_`
+          text: `## 미완료 작업 상태\n\n**감지된 항목**: ${stats.pendingTodoCount}개\n**분석된 응답**: ${stats.responsesAnalyzed}개\n\n### 항목 목록\n${itemsList}\n\n_완료하려면 \`todo_enforcer action=complete item_index=N\` 사용_`
         }]
       };
     }
 
     case 'clear': {
-      clearIncompleteItems();
+      clearTodos();
       return {
         content: [{
           type: "text" as const,
@@ -323,7 +325,7 @@ export async function handleEnforcerAction(params: EnforcerActionParams) {
         };
       }
 
-      const success = markItemComplete(params.item_index);
+      const success = updateTodoStatus(params.item_index, 'completed');
       if (success) {
         return {
           content: [{

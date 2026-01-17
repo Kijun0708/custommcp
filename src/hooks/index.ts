@@ -34,7 +34,11 @@ export type {
   OnRalphLoopIterationContext,
   OnRalphLoopEndContext,
   OnErrorContext,
-  OnRateLimitContext
+  OnRateLimitContext,
+  // Sisyphus-style events
+  OnSessionIdleContext,
+  OnAssistantResponseContext,
+  OnBoulderContinuationContext
 } from './types.js';
 
 export {

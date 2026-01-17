@@ -1,17 +1,23 @@
 // src/hooks/builtin/sisyphus-orchestrator.ts
 
 /**
- * Sisyphus Orchestrator Hook
+ * Sisyphus Orchestrator Hook (oh-my-opencode Style)
  *
- * Main orchestration hook that coordinates AI agents for complex tasks.
+ * Main orchestration hook that enforces delegation-based task completion.
  * Named after Sisyphus - continuously working to push the boulder uphill.
  *
+ * Core Principles (from oh-my-opencode):
+ * 1. DELEGATION REQUIRED - Orchestrator should NEVER modify code directly
+ * 2. SUBAGENTS LIE - Always verify subagent work independently
+ * 3. PERSISTENCE - Keep pushing until the boulder reaches the top
+ *
  * Features:
- * - Task classification and routing
- * - Multi-agent coordination
- * - Progress tracking
- * - Automatic retry and recovery
- * - Work session management
+ * - Delegation enforcement with warnings
+ * - "Subagents LIE" verification reminders
+ * - Pending file path tracking
+ * - Session state management
+ * - Integration with Boulder State
+ * - Auto-continuation on idle
  */
 
 import {
@@ -24,10 +30,13 @@ import {
   OnWorkflowStartContext,
   OnWorkflowEndContext,
   OnWorkflowPhaseContext,
-  OnErrorContext
+  OnErrorContext,
+  OnAssistantResponseContext,
+  OnBoulderContinuationContext
 } from '../types.js';
 import { registerHook } from '../manager.js';
 import { logger } from '../../utils/logger.js';
+import { getBoulderManager } from '../../features/boulder-state/manager.js';
 
 // ============ Types ============
 
@@ -35,53 +44,42 @@ import { logger } from '../../utils/logger.js';
  * Task intent classification
  */
 type TaskIntent =
-  | 'conceptual'      // Design, architecture, planning
-  | 'implementation'  // Code writing, feature building
-  | 'debugging'       // Bug fixing, error resolution
-  | 'refactoring'     // Code improvement, optimization
-  | 'research'        // Investigation, learning
-  | 'review'          // Code review, validation
-  | 'documentation'   // Writing docs, comments
-  | 'quick'           // Simple, fast tasks
+  | 'conceptual'
+  | 'implementation'
+  | 'debugging'
+  | 'refactoring'
+  | 'research'
+  | 'review'
+  | 'documentation'
+  | 'quick'
   | 'unknown';
 
 /**
  * Workflow phase
  */
 type WorkflowPhase =
-  | 'intent'          // Understanding what to do
-  | 'assessment'      // Analyzing scope and complexity
-  | 'exploration'     // Gathering context
-  | 'planning'        // Creating execution plan
-  | 'implementation'  // Executing the plan
-  | 'verification'    // Validating results
-  | 'recovery'        // Handling failures
-  | 'completion';     // Wrapping up
+  | 'intent'
+  | 'assessment'
+  | 'exploration'
+  | 'planning'
+  | 'implementation'
+  | 'verification'
+  | 'recovery'
+  | 'completion';
 
 /**
- * Agent assignment
+ * Tools that modify files (delegation targets)
  */
-interface AgentAssignment {
-  agent: string;
-  role: string;
-  priority: number;
-}
-
-/**
- * Task state
- */
-interface TaskState {
-  id: string;
-  intent: TaskIntent;
-  phase: WorkflowPhase;
-  prompt: string;
-  agents: AgentAssignment[];
-  attempts: number;
-  errors: string[];
-  startTime: number;
-  lastUpdateTime: number;
-  metadata: Record<string, unknown>;
-}
+const CODE_MODIFYING_TOOLS = [
+  'write_file',
+  'edit_file',
+  'create_file',
+  'delete_file',
+  'move_file',
+  'rename_file',
+  'patch_file',
+  'apply_diff'
+];
 
 /**
  * Orchestrator configuration
@@ -91,135 +89,101 @@ interface OrchestratorConfig {
   enabled: boolean;
   /** Maximum retry attempts */
   maxAttempts: number;
-  /** Auto-classify task intent */
-  autoClassify: boolean;
-  /** Auto-assign agents */
-  autoAssignAgents: boolean;
-  /** Enable progress tracking */
-  trackProgress: boolean;
+  /** Enforce delegation (warn when orchestrator tries to modify code) */
+  enforceDelegation: boolean;
+  /** Inject "Subagents LIE" warning */
+  injectSubagentWarning: boolean;
+  /** Track pending file modifications */
+  trackPendingFiles: boolean;
+  /** Auto-continue on idle */
+  autoContinue: boolean;
   /** Intent classification patterns */
   intentPatterns: Record<TaskIntent, string[]>;
-  /** Agent assignments by intent */
-  agentsByIntent: Record<TaskIntent, AgentAssignment[]>;
 }
 
-/**
- * Orchestrator statistics
- */
-interface OrchestratorStats {
-  totalTasksOrchestrated: number;
-  tasksByIntent: Record<string, number>;
-  tasksByPhase: Record<string, number>;
-  successfulTasks: number;
-  failedTasks: number;
-  totalAgentCalls: number;
-  averageTaskDuration: number;
-  currentActiveTasks: number;
-}
-
-// ============ State ============
-
-let config: OrchestratorConfig = {
+const DEFAULT_CONFIG: OrchestratorConfig = {
   enabled: true,
   maxAttempts: 3,
-  autoClassify: true,
-  autoAssignAgents: true,
-  trackProgress: true,
+  enforceDelegation: true,
+  injectSubagentWarning: true,
+  trackPendingFiles: true,
+  autoContinue: true,
   intentPatterns: {
-    conceptual: [
-      'design', 'architect', 'plan', 'strategy', 'approach',
-      '설계', '아키텍처', '계획', '전략'
-    ],
-    implementation: [
-      'implement', 'create', 'build', 'add', 'make', 'write code',
-      '구현', '생성', '빌드', '추가', '만들'
-    ],
-    debugging: [
-      'fix', 'bug', 'error', 'issue', 'problem', 'broken', 'not working',
-      '수정', '버그', '에러', '오류', '문제'
-    ],
-    refactoring: [
-      'refactor', 'improve', 'optimize', 'clean', 'reorganize',
-      '리팩토링', '개선', '최적화', '정리'
-    ],
-    research: [
-      'research', 'investigate', 'explore', 'understand', 'learn', 'find out',
-      '조사', '탐구', '이해', '학습', '알아보'
-    ],
-    review: [
-      'review', 'check', 'validate', 'verify', 'audit',
-      '리뷰', '검토', '확인', '검증'
-    ],
-    documentation: [
-      'document', 'readme', 'comment', 'explain', 'describe',
-      '문서', '설명', '주석'
-    ],
-    quick: [
-      'quick', 'simple', 'small', 'minor', 'tiny',
-      '빠른', '간단', '작은', '사소한'
-    ],
+    conceptual: ['design', 'architect', 'plan', 'strategy', '설계', '아키텍처', '계획'],
+    implementation: ['implement', 'create', 'build', 'add', '구현', '생성', '추가'],
+    debugging: ['fix', 'bug', 'error', 'debug', '수정', '버그', '에러'],
+    refactoring: ['refactor', 'improve', 'optimize', '리팩토링', '개선', '최적화'],
+    research: ['research', 'investigate', 'explore', '조사', '탐구'],
+    review: ['review', 'check', 'validate', '리뷰', '검토'],
+    documentation: ['document', 'readme', 'comment', '문서', '설명'],
+    quick: ['quick', 'simple', 'small', '빠른', '간단'],
     unknown: []
-  },
-  agentsByIntent: {
-    conceptual: [
-      { agent: 'strategist', role: 'Lead architect', priority: 1 },
-      { agent: 'metis', role: 'Analysis support', priority: 2 }
-    ],
-    implementation: [
-      { agent: 'strategist', role: 'Implementation guide', priority: 1 },
-      { agent: 'reviewer', role: 'Code quality', priority: 3 }
-    ],
-    debugging: [
-      { agent: 'strategist', role: 'Debug strategy', priority: 1 },
-      { agent: 'explorer', role: 'Code search', priority: 2 }
-    ],
-    refactoring: [
-      { agent: 'reviewer', role: 'Quality assessment', priority: 1 },
-      { agent: 'strategist', role: 'Refactor strategy', priority: 2 }
-    ],
-    research: [
-      { agent: 'researcher', role: 'Primary researcher', priority: 1 },
-      { agent: 'librarian', role: 'Knowledge support', priority: 2 }
-    ],
-    review: [
-      { agent: 'reviewer', role: 'Primary reviewer', priority: 1 },
-      { agent: 'momus', role: 'Critical analysis', priority: 2 }
-    ],
-    documentation: [
-      { agent: 'writer', role: 'Documentation lead', priority: 1 },
-      { agent: 'researcher', role: 'Content research', priority: 2 }
-    ],
-    quick: [
-      { agent: 'explorer', role: 'Quick execution', priority: 1 }
-    ],
-    unknown: [
-      { agent: 'strategist', role: 'General guidance', priority: 1 }
-    ]
   }
 };
 
-let stats: OrchestratorStats = {
-  totalTasksOrchestrated: 0,
-  tasksByIntent: {},
-  tasksByPhase: {},
-  successfulTasks: 0,
-  failedTasks: 0,
-  totalAgentCalls: 0,
-  averageTaskDuration: 0,
-  currentActiveTasks: 0
+let config: OrchestratorConfig = { ...DEFAULT_CONFIG };
+
+/**
+ * Session state for Sisyphus orchestrator
+ */
+interface SessionState {
+  /** Current task ID */
+  currentTaskId?: string;
+  /** Current task intent */
+  currentIntent?: TaskIntent;
+  /** Current workflow phase */
+  currentPhase: WorkflowPhase;
+  /** Files with pending modifications */
+  pendingFilePaths: Set<string>;
+  /** Whether last event was an abort error */
+  lastEventWasAbortError: boolean;
+  /** Subagent calls made in current session */
+  subagentCallCount: number;
+  /** Warnings issued count */
+  warningsIssued: number;
+  /** Last activity timestamp */
+  lastActivityAt: number;
+  /** Total delegations in session */
+  totalDelegations: number;
+  /** Direct modification attempts (violations) */
+  directModificationAttempts: number;
+}
+
+let sessionState: SessionState = {
+  currentPhase: 'intent',
+  pendingFilePaths: new Set(),
+  lastEventWasAbortError: false,
+  subagentCallCount: 0,
+  warningsIssued: 0,
+  lastActivityAt: Date.now(),
+  totalDelegations: 0,
+  directModificationAttempts: 0
 };
 
-const activeTasks: Map<string, TaskState> = new Map();
+/**
+ * Statistics
+ */
+interface OrchestratorStats {
+  totalTasksOrchestrated: number;
+  successfulTasks: number;
+  failedTasks: number;
+  totalSubagentCalls: number;
+  delegationViolations: number;
+  averageTaskDuration: number;
+}
+
+let stats: OrchestratorStats = {
+  totalTasksOrchestrated: 0,
+  successfulTasks: 0,
+  failedTasks: 0,
+  totalSubagentCalls: 0,
+  delegationViolations: 0,
+  averageTaskDuration: 0
+};
+
 const taskDurations: number[] = [];
 
 // ============ Utility Functions ============
-
-/**
- * Generates unique task ID
- */
-function generateTaskId(): string {
-  return `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
 
 /**
  * Classifies task intent from prompt
@@ -241,123 +205,89 @@ function classifyIntent(prompt: string): TaskIntent {
 }
 
 /**
- * Gets agents for intent
+ * Generates the DELEGATION REQUIRED warning message
  */
-function getAgentsForIntent(intent: TaskIntent): AgentAssignment[] {
-  return config.agentsByIntent[intent] || config.agentsByIntent.unknown;
+function generateDelegationWarning(toolName: string, filePath?: string): string {
+  return `⚠️ [CRITICAL SYSTEM DIRECTIVE - DELEGATION REQUIRED]
+
+🚨 **직접 코드 수정 시도가 감지되었습니다!**
+
+Tool: \`${toolName}\`${filePath ? `\nFile: \`${filePath}\`` : ''}
+
+📋 **Sisyphus 오케스트레이션 규칙:**
+1. 오케스트레이터(당신)는 **절대로** 직접 코드를 수정하면 안 됩니다
+2. 코드 수정은 반드시 **서브에이전트에게 위임**해야 합니다
+3. 위임 후에는 결과를 **직접 검증**해야 합니다
+
+🎯 **올바른 접근 방식:**
+- \`consult_expert\` 또는 \`route_by_category\`를 사용하여 전문가에게 위임
+- 위임 시 명확한 지시사항과 검증 기준을 포함
+- 결과를 LSP, 테스트, 또는 직접 읽기로 검증
+
+❌ **금지된 행동:**
+- 직접 파일 쓰기/수정
+- 서브에이전트 응답을 검증 없이 신뢰
+
+다시 시도하되, 이번에는 적절한 전문가에게 위임하세요.`;
 }
 
 /**
- * Creates new task state
+ * Generates the SUBAGENTS LIE warning message
  */
-function createTaskState(prompt: string, intent?: TaskIntent): TaskState {
-  const classifiedIntent = intent || (config.autoClassify ? classifyIntent(prompt) : 'unknown');
-  const agents = config.autoAssignAgents ? getAgentsForIntent(classifiedIntent) : [];
+function generateSubagentWarning(expertId: string): string {
+  return `⚠️ [VERIFICATION REMINDER - SUBAGENTS LIE]
 
-  return {
-    id: generateTaskId(),
-    intent: classifiedIntent,
-    phase: 'intent',
-    prompt,
-    agents,
-    attempts: 0,
-    errors: [],
-    startTime: Date.now(),
-    lastUpdateTime: Date.now(),
-    metadata: {}
-  };
+📋 **서브에이전트 응답 검증 필요**
+
+Expert: \`${expertId}\`
+
+🔍 **중요한 사실:**
+- 서브에이전트는 때때로 **거짓말**을 합니다
+- "완료했습니다", "수정했습니다"는 **검증 없이 신뢰하면 안 됩니다**
+
+✅ **검증 체크리스트:**
+1. [ ] 파일이 실제로 수정되었는지 직접 확인
+2. [ ] LSP로 타입 에러 확인
+3. [ ] 테스트 실행으로 기능 검증
+4. [ ] 빌드가 성공하는지 확인
+
+🎯 **다음 단계:**
+- 위 검증 항목 중 하나 이상을 수행하세요
+- 검증 결과에 따라 다음 작업을 결정하세요`;
 }
 
 /**
- * Updates task phase
+ * Records activity
  */
-function updateTaskPhase(taskId: string, phase: WorkflowPhase): void {
-  const task = activeTasks.get(taskId);
-  if (task) {
-    task.phase = phase;
-    task.lastUpdateTime = Date.now();
-    stats.tasksByPhase[phase] = (stats.tasksByPhase[phase] || 0) + 1;
+function recordActivity(): void {
+  sessionState.lastActivityAt = Date.now();
+
+  const boulderManager = getBoulderManager();
+  boulderManager.recordActivity();
+}
+
+/**
+ * Adds pending file path
+ */
+function addPendingFile(filePath: string): void {
+  sessionState.pendingFilePaths.add(filePath);
+
+  if (config.trackPendingFiles) {
+    const boulderManager = getBoulderManager();
+    boulderManager.addPendingFilePath(filePath);
   }
 }
 
 /**
- * Records task error
+ * Removes pending file path
  */
-function recordTaskError(taskId: string, error: string): void {
-  const task = activeTasks.get(taskId);
-  if (task) {
-    task.errors.push(error);
-    task.attempts++;
-    task.lastUpdateTime = Date.now();
+function removePendingFile(filePath: string): void {
+  sessionState.pendingFilePaths.delete(filePath);
+
+  if (config.trackPendingFiles) {
+    const boulderManager = getBoulderManager();
+    boulderManager.removePendingFilePath(filePath);
   }
-}
-
-/**
- * Completes task
- */
-function completeTask(taskId: string, success: boolean): void {
-  const task = activeTasks.get(taskId);
-  if (task) {
-    const duration = Date.now() - task.startTime;
-    taskDurations.push(duration);
-
-    if (taskDurations.length > 100) {
-      taskDurations.shift();
-    }
-
-    stats.averageTaskDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length;
-
-    if (success) {
-      stats.successfulTasks++;
-    } else {
-      stats.failedTasks++;
-    }
-
-    activeTasks.delete(taskId);
-    stats.currentActiveTasks = activeTasks.size;
-  }
-}
-
-/**
- * Generates orchestration message
- */
-function generateOrchestrationMessage(task: TaskState): string {
-  const agentList = task.agents
-    .sort((a, b) => a.priority - b.priority)
-    .map(a => `- **${a.agent}**: ${a.role}`)
-    .join('\n');
-
-  return `
-🎯 **Task Orchestration**
-
-**Task ID:** \`${task.id}\`
-**Intent:** ${task.intent}
-**Phase:** ${task.phase}
-
-**Assigned Agents:**
-${agentList}
-
-**Guidance:**
-${getPhaseGuidance(task.phase, task.intent)}
-`;
-}
-
-/**
- * Gets guidance for current phase
- */
-function getPhaseGuidance(phase: WorkflowPhase, intent: TaskIntent): string {
-  const guidance: Record<WorkflowPhase, string> = {
-    intent: 'Clarify the task requirements and objectives.',
-    assessment: 'Analyze scope, complexity, and required resources.',
-    exploration: 'Gather necessary context and information.',
-    planning: 'Create a detailed execution plan.',
-    implementation: 'Execute the plan step by step.',
-    verification: 'Validate the results meet requirements.',
-    recovery: 'Address any issues or failures.',
-    completion: 'Finalize and document the work.'
-  };
-
-  return guidance[phase] || 'Proceed with the task.';
 }
 
 // ============ Hooks ============
@@ -365,10 +295,10 @@ function getPhaseGuidance(phase: WorkflowPhase, intent: TaskIntent): string {
 /**
  * Hook: Initialize orchestration on workflow start
  */
-const initializeOnWorkflowStartHook: HookDefinition<OnWorkflowStartContext> = {
-  id: 'builtin:sisyphus-orchestrator:workflow-start',
+const workflowStartHook: HookDefinition<OnWorkflowStartContext> = {
+  id: 'builtin:sisyphus:workflow-start',
   name: 'Sisyphus Orchestrator (Workflow Start)',
-  description: 'Initializes task orchestration at workflow start',
+  description: 'Initializes Sisyphus orchestration at workflow start',
   eventType: 'onWorkflowStart',
   priority: 'high',
   enabled: true,
@@ -376,40 +306,223 @@ const initializeOnWorkflowStartHook: HookDefinition<OnWorkflowStartContext> = {
   handler: async (context): Promise<HookResult> => {
     if (!config.enabled) return { decision: 'continue' };
 
-    // Create task state from workflow context
-    const prompt = (context as any).prompt || (context as any).request || '';
-    const task = createTaskState(prompt);
+    // Reset session state
+    sessionState = {
+      currentTaskId: `sisyphus_${Date.now()}`,
+      currentIntent: classifyIntent(context.request),
+      currentPhase: 'intent',
+      pendingFilePaths: new Set(),
+      lastEventWasAbortError: false,
+      subagentCallCount: 0,
+      warningsIssued: 0,
+      lastActivityAt: Date.now(),
+      totalDelegations: 0,
+      directModificationAttempts: 0
+    };
 
-    activeTasks.set(task.id, task);
     stats.totalTasksOrchestrated++;
-    stats.tasksByIntent[task.intent] = (stats.tasksByIntent[task.intent] || 0) + 1;
-    stats.currentActiveTasks = activeTasks.size;
 
     logger.info({
-      taskId: task.id,
-      intent: task.intent,
-      agents: task.agents.map(a => a.agent)
-    }, 'Task orchestration initialized');
+      taskId: sessionState.currentTaskId,
+      intent: sessionState.currentIntent
+    }, '[Sisyphus] Orchestration initialized');
 
-    const message = generateOrchestrationMessage(task);
+    const message = `🎯 **Sisyphus 오케스트레이션 시작**
+
+**Task ID:** \`${sessionState.currentTaskId}\`
+**Intent:** ${sessionState.currentIntent}
+
+📋 **오케스트레이션 규칙:**
+1. 코드 수정은 반드시 전문가에게 **위임**
+2. 서브에이전트 응답은 반드시 **검증**
+3. 모든 작업이 완료될 때까지 **계속 진행**
+
+🚀 작업을 시작하세요!`;
 
     return {
       decision: 'continue',
       injectMessage: message,
       metadata: {
-        orchestratorTaskId: task.id,
-        intent: task.intent,
-        phase: task.phase
+        sisyphusTaskId: sessionState.currentTaskId,
+        intent: sessionState.currentIntent
       }
     };
   }
 };
 
 /**
- * Hook: Track phase transitions
+ * Hook: Enforce delegation on tool calls
  */
-const trackPhaseTransitionHook: HookDefinition<OnWorkflowPhaseContext> = {
-  id: 'builtin:sisyphus-orchestrator:phase-transition',
+const enforceDelgationHook: HookDefinition<OnToolCallContext> = {
+  id: 'builtin:sisyphus:enforce-delegation',
+  name: 'Sisyphus Orchestrator (Enforce Delegation)',
+  description: 'Warns when orchestrator attempts direct code modification',
+  eventType: 'onToolCall',
+  priority: 'critical',
+  enabled: true,
+
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled || !config.enforceDelegation) {
+      return { decision: 'continue' };
+    }
+
+    recordActivity();
+
+    // Check if this is a code-modifying tool
+    if (CODE_MODIFYING_TOOLS.some(tool => context.toolName.toLowerCase().includes(tool))) {
+      const filePath = (context.toolInput as any)?.file_path ||
+                       (context.toolInput as any)?.path ||
+                       (context.toolInput as any)?.filePath;
+
+      sessionState.directModificationAttempts++;
+      sessionState.warningsIssued++;
+      stats.delegationViolations++;
+
+      logger.warn({
+        tool: context.toolName,
+        filePath,
+        violations: sessionState.directModificationAttempts
+      }, '[Sisyphus] Direct modification attempt detected');
+
+      // Add to pending files for tracking
+      if (filePath) {
+        addPendingFile(filePath);
+      }
+
+      const warning = generateDelegationWarning(context.toolName, filePath);
+
+      return {
+        decision: 'continue',  // Don't block, just warn
+        injectMessage: warning,
+        metadata: {
+          delegationViolation: true,
+          tool: context.toolName,
+          filePath,
+          violationCount: sessionState.directModificationAttempts
+        }
+      };
+    }
+
+    return { decision: 'continue' };
+  }
+};
+
+/**
+ * Hook: Track tool results for pending files
+ */
+const trackToolResultHook: HookDefinition<OnToolResultContext> = {
+  id: 'builtin:sisyphus:track-tool-result',
+  name: 'Sisyphus Orchestrator (Track Tool Result)',
+  description: 'Tracks tool results for file modification tracking',
+  eventType: 'onToolResult',
+  priority: 'normal',
+  enabled: true,
+
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled || !config.trackPendingFiles) {
+      return { decision: 'continue' };
+    }
+
+    recordActivity();
+
+    // If tool succeeded and was file-modifying, remove from pending
+    if (context.success) {
+      const filePath = (context.toolInput as any)?.file_path ||
+                       (context.toolInput as any)?.path ||
+                       (context.toolInput as any)?.filePath;
+
+      if (filePath && sessionState.pendingFilePaths.has(filePath)) {
+        removePendingFile(filePath);
+
+        logger.debug({
+          tool: context.toolName,
+          filePath
+        }, '[Sisyphus] File modification completed');
+      }
+    }
+
+    return { decision: 'continue' };
+  }
+};
+
+/**
+ * Hook: Track expert calls (delegation)
+ */
+const trackExpertCallHook: HookDefinition<OnExpertCallContext> = {
+  id: 'builtin:sisyphus:track-expert-call',
+  name: 'Sisyphus Orchestrator (Track Expert Call)',
+  description: 'Tracks expert calls as delegations',
+  eventType: 'onExpertCall',
+  priority: 'normal',
+  enabled: true,
+
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled) return { decision: 'continue' };
+
+    recordActivity();
+
+    sessionState.subagentCallCount++;
+    sessionState.totalDelegations++;
+    stats.totalSubagentCalls++;
+
+    logger.debug({
+      expertId: context.expertId,
+      delegationCount: sessionState.totalDelegations
+    }, '[Sisyphus] Expert delegation made');
+
+    return { decision: 'continue' };
+  }
+};
+
+/**
+ * Hook: Inject subagent warning after expert result
+ */
+const subagentWarningHook: HookDefinition<OnExpertResultContext> = {
+  id: 'builtin:sisyphus:subagent-warning',
+  name: 'Sisyphus Orchestrator (Subagent Warning)',
+  description: 'Injects "Subagents LIE" warning after expert responses',
+  eventType: 'onExpertResult',
+  priority: 'normal',
+  enabled: true,
+
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled || !config.injectSubagentWarning) {
+      return { decision: 'continue' };
+    }
+
+    recordActivity();
+
+    // Check if response claims completion
+    const claimsCompletion = /(?:완료|완성|done|complete|finished|수정했|implemented)/i.test(context.response);
+
+    if (claimsCompletion) {
+      const warning = generateSubagentWarning(context.expertId);
+
+      logger.debug({
+        expertId: context.expertId,
+        claimsCompletion
+      }, '[Sisyphus] Subagent claimed completion - warning injected');
+
+      return {
+        decision: 'continue',
+        injectMessage: warning,
+        metadata: {
+          subagentWarning: true,
+          expertId: context.expertId,
+          claimsCompletion
+        }
+      };
+    }
+
+    return { decision: 'continue' };
+  }
+};
+
+/**
+ * Hook: Track workflow phase transitions
+ */
+const phaseTransitionHook: HookDefinition<OnWorkflowPhaseContext> = {
+  id: 'builtin:sisyphus:phase-transition',
   name: 'Sisyphus Orchestrator (Phase Transition)',
   description: 'Tracks workflow phase transitions',
   eventType: 'onWorkflowPhase',
@@ -419,141 +532,147 @@ const trackPhaseTransitionHook: HookDefinition<OnWorkflowPhaseContext> = {
   handler: async (context): Promise<HookResult> => {
     if (!config.enabled) return { decision: 'continue' };
 
-    // Find active task and update phase
-    const taskId = (context as any).taskId;
-    if (taskId && activeTasks.has(taskId)) {
-      const phase = (context as any).phase as WorkflowPhase;
-      if (phase) {
-        updateTaskPhase(taskId, phase);
-        logger.debug({ taskId, phase }, 'Task phase updated');
-      }
-    }
+    recordActivity();
 
-    return { decision: 'continue' };
-  }
-};
+    const newPhase = context.phaseId as WorkflowPhase;
+    const oldPhase = sessionState.currentPhase;
+    sessionState.currentPhase = newPhase;
 
-/**
- * Hook: Coordinate agent calls
- */
-const coordinateAgentCallHook: HookDefinition<OnExpertCallContext> = {
-  id: 'builtin:sisyphus-orchestrator:coordinate-agent',
-  name: 'Sisyphus Orchestrator (Coordinate Agent)',
-  description: 'Coordinates agent calls based on task state',
-  eventType: 'onExpertCall',
-  priority: 'normal',
-  enabled: true,
-
-  handler: async (context): Promise<HookResult> => {
-    if (!config.enabled) return { decision: 'continue' };
-
-    stats.totalAgentCalls++;
-
-    // Check if we should suggest a different agent based on active task
-    for (const task of activeTasks.values()) {
-      const suggestedAgent = task.agents.find(a => a.priority === 1);
-
-      if (suggestedAgent && suggestedAgent.agent !== context.expertId) {
-        // Don't block, just add metadata about suggestion
-        return {
-          decision: 'continue',
-          metadata: {
-            orchestratorSuggestion: suggestedAgent.agent,
-            currentAgent: context.expertId,
-            taskIntent: task.intent
-          }
-        };
-      }
-    }
-
-    return { decision: 'continue' };
-  }
-};
-
-/**
- * Hook: Handle agent results
- */
-const handleAgentResultHook: HookDefinition<OnExpertResultContext> = {
-  id: 'builtin:sisyphus-orchestrator:handle-result',
-  name: 'Sisyphus Orchestrator (Handle Result)',
-  description: 'Processes agent results for orchestration decisions',
-  eventType: 'onExpertResult',
-  priority: 'low',
-  enabled: true,
-
-  handler: async (context): Promise<HookResult> => {
-    if (!config.enabled) return { decision: 'continue' };
-
-    // Track successful agent calls
     logger.debug({
-      expert: context.expertId,
-      responseLength: context.response?.length
-    }, 'Agent result received');
+      oldPhase,
+      newPhase,
+      attemptNumber: context.attemptNumber
+    }, '[Sisyphus] Phase transition');
 
     return { decision: 'continue' };
   }
 };
 
 /**
- * Hook: Handle errors for recovery
+ * Hook: Handle errors with recovery guidance
  */
-const handleErrorForRecoveryHook: HookDefinition<OnErrorContext> = {
-  id: 'builtin:sisyphus-orchestrator:error-recovery',
+const errorRecoveryHook: HookDefinition<OnErrorContext> = {
+  id: 'builtin:sisyphus:error-recovery',
   name: 'Sisyphus Orchestrator (Error Recovery)',
-  description: 'Handles errors and triggers recovery phase',
+  description: 'Handles errors and provides recovery guidance',
   eventType: 'onError',
+  priority: 'high',
+  enabled: true,
+
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled) return { decision: 'continue' };
+
+    // Check if this is an abort error
+    const isAbortError = /abort|cancel|interrupt/i.test(context.errorMessage);
+    sessionState.lastEventWasAbortError = isAbortError;
+
+    // Update Boulder state
+    const boulderManager = getBoulderManager();
+    boulderManager.setLastEventWasAbortError(isAbortError);
+
+    logger.warn({
+      error: context.errorMessage,
+      source: context.source,
+      isAbort: isAbortError,
+      recoverable: context.recoverable
+    }, '[Sisyphus] Error occurred');
+
+    if (!context.recoverable) {
+      stats.failedTasks++;
+
+      return {
+        decision: 'continue',
+        injectMessage: `❌ [Sisyphus 복구 불가 에러]
+
+에러: ${context.errorMessage}
+소스: ${context.source}
+
+이 에러는 복구가 불가능합니다. 사용자에게 상황을 설명하고 대안을 제시하세요.`
+      };
+    }
+
+    sessionState.currentPhase = 'recovery';
+
+    return {
+      decision: 'continue',
+      injectMessage: `⚠️ [Sisyphus 복구 모드]
+
+에러: ${context.errorMessage}
+소스: ${context.source}
+
+복구를 시도합니다. 다른 접근 방식을 사용하세요.`
+    };
+  }
+};
+
+/**
+ * Hook: Handle assistant response for code modification detection
+ */
+const assistantResponseHook: HookDefinition<OnAssistantResponseContext> = {
+  id: 'builtin:sisyphus:assistant-response',
+  name: 'Sisyphus Orchestrator (Assistant Response)',
+  description: 'Monitors assistant responses for delegation compliance',
+  eventType: 'onAssistantResponse',
   priority: 'normal',
   enabled: true,
 
   handler: async (context): Promise<HookResult> => {
     if (!config.enabled) return { decision: 'continue' };
 
-    // Find active task and record error
-    for (const [taskId, task] of activeTasks.entries()) {
-      if (task.attempts < config.maxAttempts) {
-        recordTaskError(taskId, context.errorMessage);
-        updateTaskPhase(taskId, 'recovery');
+    recordActivity();
 
-        logger.warn({
-          taskId,
-          error: context.errorMessage,
-          attempts: task.attempts,
-          maxAttempts: config.maxAttempts
-        }, 'Task error recorded, entering recovery');
+    // Check if response contains code modifications without delegation
+    if (context.hasCodeModifications && !context.containsDelegation) {
+      sessionState.directModificationAttempts++;
 
-        return {
-          decision: 'continue',
-          injectMessage: `
-⚠️ **Recovery Mode** (Attempt ${task.attempts}/${config.maxAttempts})
+      logger.warn({
+        modifiedFiles: context.modifiedFiles,
+        containsDelegation: context.containsDelegation
+      }, '[Sisyphus] Code modification without delegation detected');
+    }
 
-Error: ${context.errorMessage}
+    return { decision: 'continue' };
+  }
+};
 
-Attempting recovery strategy...
-`,
-          metadata: {
-            orchestratorRecovery: true,
-            taskId,
-            attempts: task.attempts
-          }
-        };
-      } else {
-        // Max attempts reached
-        completeTask(taskId, false);
+/**
+ * Hook: Handle boulder continuation trigger
+ */
+const boulderContinuationHook: HookDefinition<OnBoulderContinuationContext> = {
+  id: 'builtin:sisyphus:boulder-continuation',
+  name: 'Sisyphus Orchestrator (Boulder Continuation)',
+  description: 'Handles boulder continuation prompts',
+  eventType: 'onBoulderContinuation',
+  priority: 'high',
+  enabled: true,
 
-        return {
-          decision: 'continue',
-          injectMessage: `
-❌ **Task Failed** after ${config.maxAttempts} attempts
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled || !config.autoContinue) {
+      return { decision: 'continue' };
+    }
 
-Errors encountered:
-${task.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')}
-`,
-          metadata: {
-            orchestratorFailed: true,
-            taskId
-          }
-        };
-      }
+    // Generate continuation prompt
+    const boulderManager = getBoulderManager();
+    const prompt = boulderManager.generateContinuationPrompt();
+
+    if (prompt) {
+      boulderManager.incrementContinuationCount();
+
+      logger.info({
+        boulderId: context.boulderId,
+        remainingTasks: context.remainingTasksCount,
+        attempts: context.attemptsMade
+      }, '[Sisyphus] Boulder continuation triggered');
+
+      return {
+        decision: 'continue',
+        injectMessage: prompt,
+        metadata: {
+          boulderContinuation: true,
+          boulderId: context.boulderId,
+          remainingTasks: context.remainingTasksCount
+        }
+      };
     }
 
     return { decision: 'continue' };
@@ -563,10 +682,10 @@ ${task.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')}
 /**
  * Hook: Finalize on workflow end
  */
-const finalizeOnWorkflowEndHook: HookDefinition<OnWorkflowEndContext> = {
-  id: 'builtin:sisyphus-orchestrator:workflow-end',
+const workflowEndHook: HookDefinition<OnWorkflowEndContext> = {
+  id: 'builtin:sisyphus:workflow-end',
   name: 'Sisyphus Orchestrator (Workflow End)',
-  description: 'Finalizes task orchestration at workflow end',
+  description: 'Finalizes Sisyphus orchestration at workflow end',
   eventType: 'onWorkflowEnd',
   priority: 'low',
   enabled: true,
@@ -574,36 +693,62 @@ const finalizeOnWorkflowEndHook: HookDefinition<OnWorkflowEndContext> = {
   handler: async (context): Promise<HookResult> => {
     if (!config.enabled) return { decision: 'continue' };
 
-    // Complete all active tasks
-    for (const taskId of activeTasks.keys()) {
-      completeTask(taskId, context.success);
+    const duration = Date.now() - sessionState.lastActivityAt;
+    taskDurations.push(duration);
+    if (taskDurations.length > 100) {
+      taskDurations.shift();
+    }
+    stats.averageTaskDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length;
+
+    if (context.success) {
+      stats.successfulTasks++;
+    } else {
+      stats.failedTasks++;
     }
 
     logger.info({
+      taskId: sessionState.currentTaskId,
       success: context.success,
-      totalTasks: stats.totalTasksOrchestrated,
-      successRate: stats.totalTasksOrchestrated > 0
-        ? (stats.successfulTasks / stats.totalTasksOrchestrated * 100).toFixed(1) + '%'
-        : 'N/A'
-    }, 'Workflow orchestration completed');
+      delegations: sessionState.totalDelegations,
+      violations: sessionState.directModificationAttempts,
+      pendingFiles: sessionState.pendingFilePaths.size
+    }, '[Sisyphus] Orchestration completed');
+
+    // Warn if there are pending files
+    if (sessionState.pendingFilePaths.size > 0) {
+      const files = Array.from(sessionState.pendingFilePaths).join('\n- ');
+
+      return {
+        decision: 'continue',
+        injectMessage: `⚠️ [Sisyphus 완료 경고]
+
+작업이 완료되었지만 다음 파일들의 수정이 확인되지 않았습니다:
+- ${files}
+
+이 파일들이 올바르게 수정되었는지 확인하세요.`
+      };
+    }
 
     return { decision: 'continue' };
   }
 };
 
-// ============ Exports ============
+// ============ All Hooks ============
 
-/**
- * All Sisyphus orchestrator hooks
- */
 export const sisyphusOrchestratorHooks = [
-  initializeOnWorkflowStartHook,
-  trackPhaseTransitionHook,
-  coordinateAgentCallHook,
-  handleAgentResultHook,
-  handleErrorForRecoveryHook,
-  finalizeOnWorkflowEndHook
+  workflowStartHook,
+  enforceDelgationHook,
+  trackToolResultHook,
+  trackExpertCallHook,
+  subagentWarningHook,
+  phaseTransitionHook,
+  errorRecoveryHook,
+  assistantResponseHook,
+  boulderContinuationHook,
+  workflowEndHook
 ] as HookDefinition[];
+
+// ============ Public API ============
 
 /**
  * Registers Sisyphus orchestrator hooks
@@ -612,24 +757,32 @@ export function registerSisyphusOrchestratorHooks(): void {
   for (const hook of sisyphusOrchestratorHooks) {
     registerHook(hook);
   }
-  logger.debug('Sisyphus orchestrator hooks registered');
+  logger.debug('Sisyphus orchestrator hooks registered (oh-my-opencode style)');
 }
 
 /**
  * Gets orchestrator statistics
  */
 export function getSisyphusOrchestratorStats(): OrchestratorStats & {
-  config: OrchestratorConfig;
-  activeTasks: Array<{ id: string; intent: TaskIntent; phase: WorkflowPhase }>;
+  sessionState: {
+    currentTaskId?: string;
+    currentIntent?: TaskIntent;
+    currentPhase: WorkflowPhase;
+    pendingFilesCount: number;
+    delegations: number;
+    violations: number;
+  };
 } {
   return {
     ...stats,
-    config,
-    activeTasks: Array.from(activeTasks.values()).map(t => ({
-      id: t.id,
-      intent: t.intent,
-      phase: t.phase
-    }))
+    sessionState: {
+      currentTaskId: sessionState.currentTaskId,
+      currentIntent: sessionState.currentIntent,
+      currentPhase: sessionState.currentPhase,
+      pendingFilesCount: sessionState.pendingFilePaths.size,
+      delegations: sessionState.totalDelegations,
+      violations: sessionState.directModificationAttempts
+    }
   };
 }
 
@@ -639,15 +792,24 @@ export function getSisyphusOrchestratorStats(): OrchestratorStats & {
 export function resetSisyphusOrchestratorState(): void {
   stats = {
     totalTasksOrchestrated: 0,
-    tasksByIntent: {},
-    tasksByPhase: {},
     successfulTasks: 0,
     failedTasks: 0,
-    totalAgentCalls: 0,
-    averageTaskDuration: 0,
-    currentActiveTasks: 0
+    totalSubagentCalls: 0,
+    delegationViolations: 0,
+    averageTaskDuration: 0
   };
-  activeTasks.clear();
+
+  sessionState = {
+    currentPhase: 'intent',
+    pendingFilePaths: new Set(),
+    lastEventWasAbortError: false,
+    subagentCallCount: 0,
+    warningsIssued: 0,
+    lastActivityAt: Date.now(),
+    totalDelegations: 0,
+    directModificationAttempts: 0
+  };
+
   taskDurations.length = 0;
 }
 
@@ -660,21 +822,26 @@ export function updateSisyphusOrchestratorConfig(updates: Partial<OrchestratorCo
 }
 
 /**
- * Manually creates a task
+ * Gets pending file paths
  */
-export function createOrchestrationTask(prompt: string, intent?: TaskIntent): string {
-  const task = createTaskState(prompt, intent);
-  activeTasks.set(task.id, task);
-  stats.totalTasksOrchestrated++;
-  stats.currentActiveTasks = activeTasks.size;
-  return task.id;
+export function getPendingFilePaths(): string[] {
+  return Array.from(sessionState.pendingFilePaths);
 }
 
 /**
- * Gets task state
+ * Manually triggers delegation warning
  */
-export function getTaskState(taskId: string): TaskState | undefined {
-  return activeTasks.get(taskId);
+export function triggerDelegationWarning(toolName: string, filePath?: string): string {
+  sessionState.warningsIssued++;
+  return generateDelegationWarning(toolName, filePath);
+}
+
+/**
+ * Manually triggers subagent warning
+ */
+export function triggerSubagentWarning(expertId: string): string {
+  sessionState.warningsIssued++;
+  return generateSubagentWarning(expertId);
 }
 
 export default {
@@ -682,6 +849,7 @@ export default {
   getSisyphusOrchestratorStats,
   resetSisyphusOrchestratorState,
   updateSisyphusOrchestratorConfig,
-  createOrchestrationTask,
-  getTaskState
+  getPendingFilePaths,
+  triggerDelegationWarning,
+  triggerSubagentWarning
 };

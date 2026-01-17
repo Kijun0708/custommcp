@@ -1,49 +1,65 @@
 // src/hooks/builtin/todo-continuation-enforcer.ts
 
 /**
- * Todo Continuation Enforcer Hook
+ * Todo Continuation Enforcer Hook (Sisyphus Style)
  *
- * Prevents task abandonment by detecting incomplete work patterns
- * and injecting reminders to complete pending tasks.
+ * Prevents task abandonment by detecting session idle state
+ * and automatically injecting continuation prompts.
+ *
+ * Based on oh-my-opencode's todo-continuation-enforcer:
+ * - 2-second countdown after session becomes idle
+ * - Automatic prompt injection to continue pending work
+ * - Cancellation on user input, recovery mode, or background tasks
  *
  * Features:
- * - Detects incomplete task indicators in responses
- * - Tracks pending tasks across interactions
- * - Injects continuation reminders
- * - Blocks workflow completion if tasks remain
+ * - Session idle detection and countdown timer
+ * - Automatic continuation prompt injection
+ * - Integration with Boulder state tracking
+ * - Background task awareness
  */
 
 import {
   HookDefinition,
   HookResult,
-  OnExpertResultContext,
+  OnSessionIdleContext,
   OnWorkflowEndContext,
-  OnRalphLoopIterationContext
+  OnRalphLoopIterationContext,
+  OnExpertResultContext
 } from '../types.js';
 import { registerHook } from '../manager.js';
 import { logger } from '../../utils/logger.js';
 
+// ============ Types ============
+
 /**
- * Configuration for todo enforcer
+ * Configuration for TODO continuation enforcer
  */
 interface TodoEnforcerConfig {
-  /** Whether to inject reminders */
+  /** Whether the enforcer is enabled */
+  enabled: boolean;
+  /** Countdown duration in milliseconds before auto-continue */
+  countdownMs: number;
+  /** Minimum idle time before triggering countdown */
+  minIdleMs: number;
+  /** Whether to inject reminders during workflow */
   injectReminders: boolean;
-  /** Whether to block incomplete workflows */
+  /** Whether to block completion with incomplete items */
   blockIncomplete: boolean;
+  /** Maximum pending items before forcing completion */
+  maxPendingBeforeForce: number;
   /** Patterns indicating incomplete work */
   incompletePatterns: RegExp[];
   /** Patterns indicating completed work */
   completePatterns: RegExp[];
-  /** Minimum confidence to trigger (0-1) */
-  confidenceThreshold: number;
-  /** Maximum incomplete items to track */
-  maxTrackedItems: number;
 }
 
 const DEFAULT_CONFIG: TodoEnforcerConfig = {
+  enabled: true,
+  countdownMs: 2000,  // 2 seconds like oh-my-opencode
+  minIdleMs: 1000,    // Minimum 1 second idle
   injectReminders: true,
   blockIncomplete: false,
+  maxPendingBeforeForce: 5,
   incompletePatterns: [
     // Korean patterns
     /(?:나중에|이후에|다음에|추후에|향후)\s*(?:구현|작성|추가|완료|처리)/gi,
@@ -68,71 +84,133 @@ const DEFAULT_CONFIG: TodoEnforcerConfig = {
     /(?:완료|완성|끝|done|complete|finished|implemented)/gi,
     /(?:성공적으로|successfully)/gi,
     /(?:모든\s*작업|all\s*tasks?)/gi,
-  ],
-  confidenceThreshold: 0.3,
-  maxTrackedItems: 20
+  ]
 };
 
 let config: TodoEnforcerConfig = { ...DEFAULT_CONFIG };
 
 /**
- * Tracked incomplete item
+ * Tracked TODO item
  */
-interface IncompleteItem {
-  /** Detected pattern */
-  pattern: string;
-  /** Context around the pattern */
-  context: string;
-  /** Detection timestamp */
+interface TrackedTodo {
+  /** TODO content */
+  content: string;
+  /** Current status */
+  status: 'pending' | 'in_progress' | 'completed';
+  /** When detected */
   detectedAt: string;
   /** Source (expert ID, tool, etc.) */
   source: string;
-  /** Confidence score */
+  /** Confidence score (0-1) */
   confidence: number;
+}
+
+/**
+ * Countdown state for idle detection
+ */
+interface CountdownState {
+  /** Whether countdown is active */
+  isActive: boolean;
+  /** Countdown start time */
+  startedAt: number;
+  /** Scheduled timeout ID */
+  timeoutId: NodeJS.Timeout | null;
+  /** Number of times countdown was cancelled */
+  cancelCount: number;
 }
 
 /**
  * Enforcer state
  */
 interface EnforcerState {
-  /** Detected incomplete items */
-  incompleteItems: IncompleteItem[];
-  /** Number of reminders sent */
-  reminderCount: number;
-  /** Last reminder timestamp */
-  lastReminderAt?: string;
+  /** Tracked TODO items */
+  trackedTodos: TrackedTodo[];
+  /** Countdown state */
+  countdown: CountdownState;
+  /** Number of continuation prompts injected */
+  continuationCount: number;
+  /** Last continuation timestamp */
+  lastContinuationAt?: string;
   /** Session start time */
   sessionStartTime: number;
   /** Total responses analyzed */
   responsesAnalyzed: number;
+  /** Whether recovery is in progress */
+  isRecovering: boolean;
+  /** Last activity timestamp */
+  lastActivityAt: number;
 }
 
 // Global state
 let state: EnforcerState = {
-  incompleteItems: [],
-  reminderCount: 0,
+  trackedTodos: [],
+  countdown: {
+    isActive: false,
+    startedAt: 0,
+    timeoutId: null,
+    cancelCount: 0
+  },
+  continuationCount: 0,
   sessionStartTime: Date.now(),
-  responsesAnalyzed: 0
+  responsesAnalyzed: 0,
+  isRecovering: false,
+  lastActivityAt: Date.now()
 };
 
+// Continuation prompt callback
+let continuationCallback: ((message: string) => void) | null = null;
+
+// ============ Utility Functions ============
+
 /**
- * Detects incomplete work patterns in text
+ * Generates the TODO continuation prompt (Sisyphus style)
  */
-function detectIncompletePatterns(text: string, source: string): IncompleteItem[] {
-  const items: IncompleteItem[] = [];
+function generateContinuationPrompt(todos: TrackedTodo[]): string {
+  const pendingTodos = todos.filter(t => t.status !== 'completed');
+
+  if (pendingTodos.length === 0) {
+    return '';
+  }
+
+  const todoList = pendingTodos
+    .slice(0, 5)
+    .map((t, i) => `${i + 1}. [${t.status}] ${t.content}`)
+    .join('\n');
+
+  const moreCount = pendingTodos.length > 5 ? pendingTodos.length - 5 : 0;
+
+  return `[SYSTEM REMINDER - TODO CONTINUATION]
+
+⚠️ **작업이 완료되지 않았습니다!**
+
+현재 남은 작업 목록:
+${todoList}${moreCount > 0 ? `\n... 외 ${moreCount}개 항목` : ''}
+
+다음 작업을 계속 진행해주세요. 모든 작업이 완료될 때까지 멈추지 마세요.
+
+📋 **지시사항:**
+- 위 TODO 리스트의 항목들을 순서대로 처리하세요
+- 각 항목 완료 시 TODO 상태를 업데이트하세요
+- 모든 항목이 완료될 때까지 계속 진행하세요`;
+}
+
+/**
+ * Detects incomplete patterns in text
+ */
+function detectIncompletePatterns(text: string, source: string): TrackedTodo[] {
+  const todos: TrackedTodo[] = [];
 
   for (const pattern of config.incompletePatterns) {
-    // Reset regex lastIndex
     pattern.lastIndex = 0;
 
     let match;
     while ((match = pattern.exec(text)) !== null) {
       // Extract context around match
-      const start = Math.max(0, match.index - 50);
+      const start = Math.max(0, match.index - 30);
       const end = Math.min(text.length, match.index + match[0].length + 50);
       const context = text.substring(start, end).trim();
 
-      // Check if this is a false positive (in a completed context)
+      // Check if in completed context
       let isCompleted = false;
       for (const completePattern of config.completePatterns) {
         completePattern.lastIndex = 0;
@@ -143,13 +221,12 @@ function detectIncompletePatterns(text: string, source: string): IncompleteItem[
       }
 
       if (!isCompleted) {
-        // Calculate confidence based on pattern strength
         const confidence = calculateConfidence(match[0], context);
 
-        if (confidence >= config.confidenceThreshold) {
-          items.push({
-            pattern: match[0],
-            context,
+        if (confidence >= 0.4) {
+          todos.push({
+            content: context.substring(0, 100),
+            status: 'pending',
             detectedAt: new Date().toISOString(),
             source,
             confidence
@@ -159,32 +236,27 @@ function detectIncompletePatterns(text: string, source: string): IncompleteItem[
     }
   }
 
-  // Deduplicate similar items
-  return deduplicateItems(items);
+  return deduplicateTodos(todos);
 }
 
 /**
  * Calculates confidence score for a detection
  */
 function calculateConfidence(match: string, context: string): number {
-  let confidence = 0.5; // Base confidence
+  let confidence = 0.5;
 
-  // Increase for explicit markers
   if (/TODO|FIXME|XXX|HACK|WIP/i.test(match)) {
     confidence += 0.3;
   }
 
-  // Increase for future tense language
   if (/will|need to|should|must|나중에|이후에|추후에/i.test(match)) {
     confidence += 0.2;
   }
 
-  // Decrease if in code comment (might be intentional)
   if (/\/\/|\/\*|#/.test(context.substring(0, 5))) {
-    confidence -= 0.2;
+    confidence -= 0.1;
   }
 
-  // Increase for direct incomplete statements
   if (/incomplete|unfinished|pending|미완료|미구현/i.test(context)) {
     confidence += 0.3;
   }
@@ -193,12 +265,12 @@ function calculateConfidence(match: string, context: string): number {
 }
 
 /**
- * Deduplicates similar items
+ * Deduplicates similar TODO items
  */
-function deduplicateItems(items: IncompleteItem[]): IncompleteItem[] {
+function deduplicateTodos(todos: TrackedTodo[]): TrackedTodo[] {
   const seen = new Set<string>();
-  return items.filter(item => {
-    const key = item.pattern.toLowerCase().substring(0, 20);
+  return todos.filter(todo => {
+    const key = todo.content.toLowerCase().substring(0, 30);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -206,44 +278,117 @@ function deduplicateItems(items: IncompleteItem[]): IncompleteItem[] {
 }
 
 /**
- * Generates reminder message
+ * Starts the continuation countdown
  */
-function generateReminder(items: IncompleteItem[]): string {
-  if (items.length === 0) return '';
-
-  const lines: string[] = [
-    `📋 **미완료 작업 감지** (${items.length}개)`,
-    '',
-    '다음 항목들이 완료되지 않은 것으로 보입니다:',
-    ''
-  ];
-
-  const topItems = items.slice(0, 5);
-  for (let i = 0; i < topItems.length; i++) {
-    const item = topItems[i];
-    lines.push(`${i + 1}. \`${item.pattern}\``);
-    lines.push(`   _"${item.context.substring(0, 80)}..."_`);
+function startCountdown(): void {
+  if (state.countdown.isActive) {
+    return;
   }
 
-  if (items.length > 5) {
-    lines.push(`   ... 외 ${items.length - 5}개`);
+  if (!config.enabled) {
+    return;
   }
 
-  lines.push('');
-  lines.push('작업을 계속 진행하거나 완료 상태를 명시해주세요.');
+  const pendingTodos = state.trackedTodos.filter(t => t.status !== 'completed');
+  if (pendingTodos.length === 0) {
+    return;
+  }
 
-  return lines.join('\n');
+  // Don't start if recovering
+  if (state.isRecovering) {
+    logger.debug('[Todo Enforcer] Skipping countdown - recovery in progress');
+    return;
+  }
+
+  state.countdown.isActive = true;
+  state.countdown.startedAt = Date.now();
+
+  logger.debug({
+    pendingCount: pendingTodos.length,
+    countdownMs: config.countdownMs
+  }, '[Todo Enforcer] Starting continuation countdown');
+
+  state.countdown.timeoutId = setTimeout(() => {
+    triggerContinuation();
+  }, config.countdownMs);
 }
+
+/**
+ * Cancels the active countdown
+ */
+function cancelCountdown(reason: string): void {
+  if (!state.countdown.isActive) {
+    return;
+  }
+
+  if (state.countdown.timeoutId) {
+    clearTimeout(state.countdown.timeoutId);
+    state.countdown.timeoutId = null;
+  }
+
+  state.countdown.isActive = false;
+  state.countdown.cancelCount++;
+
+  logger.debug({ reason }, '[Todo Enforcer] Countdown cancelled');
+}
+
+/**
+ * Triggers the continuation prompt
+ */
+function triggerContinuation(): void {
+  state.countdown.isActive = false;
+  state.countdown.timeoutId = null;
+
+  const pendingTodos = state.trackedTodos.filter(t => t.status !== 'completed');
+
+  if (pendingTodos.length === 0) {
+    return;
+  }
+
+  const prompt = generateContinuationPrompt(pendingTodos);
+
+  if (prompt && continuationCallback) {
+    state.continuationCount++;
+    state.lastContinuationAt = new Date().toISOString();
+
+    logger.info({
+      pendingCount: pendingTodos.length,
+      continuationCount: state.continuationCount
+    }, '[Todo Enforcer] Injecting continuation prompt');
+
+    continuationCallback(prompt);
+  }
+}
+
+/**
+ * Records activity (cancels countdown)
+ */
+function recordActivity(): void {
+  state.lastActivityAt = Date.now();
+  cancelCountdown('user_activity');
+}
+
+// ============ Public API ============
 
 /**
  * Resets enforcer state
  */
 export function resetEnforcerState(): void {
+  cancelCountdown('reset');
+
   state = {
-    incompleteItems: [],
-    reminderCount: 0,
+    trackedTodos: [],
+    countdown: {
+      isActive: false,
+      startedAt: 0,
+      timeoutId: null,
+      cancelCount: 0
+    },
+    continuationCount: 0,
     sessionStartTime: Date.now(),
-    responsesAnalyzed: 0
+    responsesAnalyzed: 0,
+    isRecovering: false,
+    lastActivityAt: Date.now()
   };
 }
 
@@ -251,37 +396,80 @@ export function resetEnforcerState(): void {
  * Gets current enforcer statistics
  */
 export function getEnforcerStats(): {
-  incompleteCount: number;
-  items: IncompleteItem[];
-  reminderCount: number;
+  trackedTodoCount: number;
+  pendingTodoCount: number;
+  continuationCount: number;
   responsesAnalyzed: number;
   sessionDurationMs: number;
+  countdownActive: boolean;
+  countdownCancelCount: number;
+  isRecovering: boolean;
 } {
   return {
-    incompleteCount: state.incompleteItems.length,
-    items: [...state.incompleteItems],
-    reminderCount: state.reminderCount,
+    trackedTodoCount: state.trackedTodos.length,
+    pendingTodoCount: state.trackedTodos.filter(t => t.status !== 'completed').length,
+    continuationCount: state.continuationCount,
     responsesAnalyzed: state.responsesAnalyzed,
-    sessionDurationMs: Date.now() - state.sessionStartTime
+    sessionDurationMs: Date.now() - state.sessionStartTime,
+    countdownActive: state.countdown.isActive,
+    countdownCancelCount: state.countdown.cancelCount,
+    isRecovering: state.isRecovering
   };
 }
 
 /**
- * Manually marks an item as complete
+ * Adds a TODO item manually
  */
-export function markItemComplete(index: number): boolean {
-  if (index >= 0 && index < state.incompleteItems.length) {
-    state.incompleteItems.splice(index, 1);
+export function addTodo(content: string, status: 'pending' | 'in_progress' = 'pending'): void {
+  state.trackedTodos.push({
+    content,
+    status,
+    detectedAt: new Date().toISOString(),
+    source: 'manual',
+    confidence: 1.0
+  });
+}
+
+/**
+ * Updates TODO item status
+ */
+export function updateTodoStatus(index: number, status: 'pending' | 'in_progress' | 'completed'): boolean {
+  if (index >= 0 && index < state.trackedTodos.length) {
+    state.trackedTodos[index].status = status;
     return true;
   }
   return false;
 }
 
 /**
- * Clears all incomplete items
+ * Clears all TODO items
  */
-export function clearIncompleteItems(): void {
-  state.incompleteItems = [];
+export function clearTodos(): void {
+  state.trackedTodos = [];
+}
+
+/**
+ * Gets all tracked TODOs
+ */
+export function getTrackedTodos(): TrackedTodo[] {
+  return [...state.trackedTodos];
+}
+
+/**
+ * Sets the continuation callback
+ */
+export function setContinuationCallback(callback: (message: string) => void): void {
+  continuationCallback = callback;
+}
+
+/**
+ * Sets recovery mode
+ */
+export function setRecoveryMode(recovering: boolean): void {
+  state.isRecovering = recovering;
+  if (recovering) {
+    cancelCountdown('recovery_mode');
+  }
 }
 
 /**
@@ -292,51 +480,114 @@ export function updateEnforcerConfig(newConfig: Partial<TodoEnforcerConfig>): vo
 }
 
 /**
+ * Manually triggers idle check (for testing)
+ */
+export function checkIdle(): void {
+  const idleDuration = Date.now() - state.lastActivityAt;
+  if (idleDuration >= config.minIdleMs) {
+    startCountdown();
+  }
+}
+
+// ============ Hooks ============
+
+/**
+ * Hook: Handle session idle event (Sisyphus)
+ */
+const sessionIdleHook: HookDefinition<OnSessionIdleContext> = {
+  id: 'builtin:todo-enforcer:session-idle',
+  name: 'Todo Continuation Enforcer (Session Idle)',
+  description: 'Detects session idle and triggers TODO continuation',
+  eventType: 'onSessionIdle',
+  priority: 'high',
+  enabled: true,
+
+  handler: async (context): Promise<HookResult> => {
+    if (!config.enabled) {
+      return { decision: 'continue' };
+    }
+
+    // Update TODO list from context
+    if (context.pendingTodos && context.pendingTodos.length > 0) {
+      for (const todo of context.pendingTodos) {
+        const existing = state.trackedTodos.find(t => t.content === todo.content);
+        if (!existing) {
+          state.trackedTodos.push({
+            content: todo.content,
+            status: todo.status,
+            detectedAt: new Date().toISOString(),
+            source: 'session',
+            confidence: 1.0
+          });
+        }
+      }
+    }
+
+    // Skip if recovering
+    if (context.isRecovering) {
+      state.isRecovering = true;
+      return { decision: 'continue' };
+    }
+
+    // Skip if background tasks running
+    if (context.hasBackgroundTasks) {
+      cancelCountdown('background_tasks');
+      return { decision: 'continue' };
+    }
+
+    // Check if we should start countdown
+    const pendingTodos = state.trackedTodos.filter(t => t.status !== 'completed');
+
+    if (pendingTodos.length > 0 && context.idleDurationMs >= config.minIdleMs) {
+      startCountdown();
+    }
+
+    return { decision: 'continue' };
+  }
+};
+
+/**
  * Hook: Detect incomplete work in expert responses
  */
-const detectIncompleteHook: HookDefinition<OnExpertResultContext> = {
-  id: 'builtin_todo_enforcer_detect',
-  name: 'Todo Continuation Enforcer (Detect)',
+const detectInExpertResultHook: HookDefinition<OnExpertResultContext> = {
+  id: 'builtin:todo-enforcer:detect-expert',
+  name: 'Todo Continuation Enforcer (Detect Expert)',
   description: 'Detects incomplete work patterns in expert responses',
   eventType: 'onExpertResult',
   priority: 'normal',
   enabled: true,
+
   handler: async (context): Promise<HookResult> => {
+    recordActivity();
     state.responsesAnalyzed++;
 
-    // Detect incomplete patterns
-    const newItems = detectIncompletePatterns(
+    // Detect new TODO items
+    const newTodos = detectIncompletePatterns(
       context.response,
       `expert:${context.expertId}`
     );
 
-    if (newItems.length > 0) {
-      // Add to tracked items (limit total)
-      state.incompleteItems.push(...newItems);
-      if (state.incompleteItems.length > config.maxTrackedItems) {
-        state.incompleteItems = state.incompleteItems.slice(-config.maxTrackedItems);
+    if (newTodos.length > 0) {
+      // Add to tracked items (deduplicate)
+      for (const todo of newTodos) {
+        const existing = state.trackedTodos.find(
+          t => t.content.toLowerCase().substring(0, 30) === todo.content.toLowerCase().substring(0, 30)
+        );
+        if (!existing) {
+          state.trackedTodos.push(todo);
+        }
+      }
+
+      // Limit total tracked items
+      if (state.trackedTodos.length > 20) {
+        state.trackedTodos = state.trackedTodos.slice(-20);
       }
 
       logger.debug({
         expertId: context.expertId,
-        newItems: newItems.length,
-        totalItems: state.incompleteItems.length
-      }, '[Todo Enforcer] Incomplete patterns detected');
-
-      // Inject reminder if configured
-      if (config.injectReminders && newItems.length >= 2) {
-        state.reminderCount++;
-        state.lastReminderAt = new Date().toISOString();
-
-        return {
-          decision: 'continue',
-          injectMessage: generateReminder(newItems),
-          metadata: {
-            incompleteItems: newItems.length,
-            totalTracked: state.incompleteItems.length
-          }
-        };
-      }
+        newTodos: newTodos.length,
+        totalTracked: state.trackedTodos.length
+      }, '[Todo Enforcer] New incomplete patterns detected');
     }
 
     return { decision: 'continue' };
@@ -347,36 +598,41 @@ const detectIncompleteHook: HookDefinition<OnExpertResultContext> = {
  * Hook: Check incomplete items on workflow end
  */
 const checkWorkflowEndHook: HookDefinition<OnWorkflowEndContext> = {
-  id: 'builtin_todo_enforcer_workflow_end',
+  id: 'builtin:todo-enforcer:workflow-end',
   name: 'Todo Continuation Enforcer (Workflow End)',
   description: 'Checks for incomplete items when workflow ends',
   eventType: 'onWorkflowEnd',
   priority: 'high',
   enabled: true,
-  handler: async (context): Promise<HookResult> => {
-    const incompleteCount = state.incompleteItems.length;
 
-    if (incompleteCount > 0) {
+  handler: async (context): Promise<HookResult> => {
+    cancelCountdown('workflow_end');
+
+    const pendingTodos = state.trackedTodos.filter(t => t.status !== 'completed');
+
+    if (pendingTodos.length > 0) {
       logger.warn({
-        incompleteItems: incompleteCount,
+        pendingCount: pendingTodos.length,
         workflowSuccess: context.success
       }, '[Todo Enforcer] Workflow ending with incomplete items');
 
-      if (config.blockIncomplete && incompleteCount >= 3) {
+      if (config.blockIncomplete && pendingTodos.length >= config.maxPendingBeforeForce) {
         return {
           decision: 'block',
-          reason: `${incompleteCount}개의 미완료 작업이 있습니다. 작업을 완료하거나 명시적으로 건너뛰기를 선언해주세요.`,
-          metadata: { incompleteItems: state.incompleteItems }
+          reason: `${pendingTodos.length}개의 미완료 작업이 있습니다. 작업을 완료하거나 명시적으로 건너뛰기를 선언해주세요.`,
+          metadata: { pendingTodos: pendingTodos.map(t => t.content) }
         };
       }
 
       // Inject final reminder
-      const reminder = generateReminder(state.incompleteItems);
-      return {
-        decision: 'continue',
-        injectMessage: reminder,
-        metadata: { incompleteItems: state.incompleteItems }
-      };
+      const prompt = generateContinuationPrompt(pendingTodos);
+      if (prompt) {
+        return {
+          decision: 'continue',
+          injectMessage: prompt,
+          metadata: { pendingCount: pendingTodos.length }
+        };
+      }
     }
 
     return { decision: 'continue' };
@@ -387,59 +643,76 @@ const checkWorkflowEndHook: HookDefinition<OnWorkflowEndContext> = {
  * Hook: Check during Ralph Loop iterations
  */
 const checkRalphLoopHook: HookDefinition<OnRalphLoopIterationContext> = {
-  id: 'builtin_todo_enforcer_ralph_loop',
+  id: 'builtin:todo-enforcer:ralph-loop',
   name: 'Todo Continuation Enforcer (Ralph Loop)',
   description: 'Checks for incomplete items during Ralph Loop iterations',
   eventType: 'onRalphLoopIteration',
   priority: 'normal',
   enabled: true,
+
   handler: async (context): Promise<HookResult> => {
-    // Detect new incomplete items
-    const newItems = detectIncompletePatterns(context.output, `ralph:${context.taskId}`);
+    recordActivity();
 
-    if (newItems.length > 0) {
-      state.incompleteItems.push(...newItems);
+    // Detect new items in iteration output
+    const newTodos = detectIncompletePatterns(context.output, `ralph:${context.taskId}`);
 
-      // Limit tracked items
-      if (state.incompleteItems.length > config.maxTrackedItems) {
-        state.incompleteItems = state.incompleteItems.slice(-config.maxTrackedItems);
+    if (newTodos.length > 0) {
+      for (const todo of newTodos) {
+        const existing = state.trackedTodos.find(
+          t => t.content.toLowerCase().substring(0, 30) === todo.content.toLowerCase().substring(0, 30)
+        );
+        if (!existing) {
+          state.trackedTodos.push(todo);
+        }
       }
     }
 
-    // If completion detected but we have incomplete items, warn
-    if (context.completionDetected && state.incompleteItems.length > 0) {
-      logger.warn({
-        iteration: context.iteration,
-        incompleteItems: state.incompleteItems.length
-      }, '[Todo Enforcer] Completion detected but items remain');
+    // If completion detected but we have pending items
+    if (context.completionDetected) {
+      const pendingTodos = state.trackedTodos.filter(t => t.status !== 'completed');
 
-      return {
-        decision: 'continue',
-        injectMessage: `⚠️ 완료 신호가 감지되었지만 ${state.incompleteItems.length}개의 미완료 항목이 있습니다.`,
-        metadata: { incompleteItems: state.incompleteItems }
-      };
+      if (pendingTodos.length > 0) {
+        logger.warn({
+          iteration: context.iteration,
+          pendingCount: pendingTodos.length
+        }, '[Todo Enforcer] Completion detected but items remain');
+
+        return {
+          decision: 'continue',
+          injectMessage: `⚠️ 완료 신호가 감지되었지만 ${pendingTodos.length}개의 미완료 항목이 있습니다.\n\n남은 항목:\n${pendingTodos.slice(0, 3).map(t => `- ${t.content}`).join('\n')}`,
+          metadata: { pendingCount: pendingTodos.length }
+        };
+      }
     }
 
     return { decision: 'continue' };
   }
 };
 
+// ============ Registration ============
+
 /**
- * Registers all todo enforcer hooks
+ * Registers all TODO continuation enforcer hooks
  */
 export function registerTodoContinuationEnforcerHooks(): void {
-  registerHook(detectIncompleteHook);
+  registerHook(sessionIdleHook);
+  registerHook(detectInExpertResultHook);
   registerHook(checkWorkflowEndHook);
   registerHook(checkRalphLoopHook);
 
-  logger.debug('Todo Continuation Enforcer hooks registered');
+  logger.debug('Todo Continuation Enforcer hooks registered (Sisyphus style)');
 }
 
 export default {
   registerTodoContinuationEnforcerHooks,
   getEnforcerStats,
   resetEnforcerState,
-  markItemComplete,
-  clearIncompleteItems,
-  updateEnforcerConfig
+  addTodo,
+  updateTodoStatus,
+  clearTodos,
+  getTrackedTodos,
+  setContinuationCallback,
+  setRecoveryMode,
+  updateEnforcerConfig,
+  checkIdle
 };

@@ -102,6 +102,36 @@ export interface ImplementationAttempt {
 }
 
 /**
+ * Active plan item tracked by Boulder
+ */
+export interface BoulderPlanItem {
+  /** Plan item content */
+  content: string;
+  /** Current status */
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  /** When added */
+  addedAt: string;
+  /** When completed (if completed) */
+  completedAt?: string;
+  /** Order index */
+  order: number;
+}
+
+/**
+ * Continuation tracking state
+ */
+export interface ContinuationState {
+  /** Number of continuation prompts injected */
+  continuationCount: number;
+  /** Last continuation timestamp */
+  lastContinuationAt?: string;
+  /** Whether continuation is currently blocked */
+  isBlocked: boolean;
+  /** Reason for blocking continuation */
+  blockReason?: string;
+}
+
+/**
  * Main Boulder State interface.
  * Persisted to disk for crash recovery.
  */
@@ -165,6 +195,26 @@ export interface BoulderState {
 
   /** Custom metadata */
   metadata?: Record<string, unknown>;
+
+  // ====== Sisyphus-style additions ======
+
+  /** Active plan items (Sisyphus) */
+  activePlan?: BoulderPlanItem[];
+
+  /** Continuation tracking state (Sisyphus) */
+  continuationState?: ContinuationState;
+
+  /** Pending file paths being modified (Sisyphus) */
+  pendingFilePaths?: string[];
+
+  /** Whether last event was an abort error (Sisyphus) */
+  lastEventWasAbortError?: boolean;
+
+  /** Last activity timestamp for idle detection (Sisyphus) */
+  lastActivityAt?: string;
+
+  /** Session context for recovery (Sisyphus) */
+  sessionContext?: string;
 }
 
 /**

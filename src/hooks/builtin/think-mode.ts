@@ -83,6 +83,7 @@ let config: ThinkModeConfig = {
     { keyword: '단계별', level: 'normal', language: 'ko' },
     // Extreme level
     { keyword: 'ultrathink', level: 'extreme', language: 'en' },
+    { keyword: 'ultrawork', level: 'extreme', language: 'en' }, // oh-my-opencode magic keyword
     { keyword: 'maximum reasoning', level: 'extreme', language: 'en' },
     { keyword: '최대 추론', level: 'extreme', language: 'ko' }
   ],

@@ -109,7 +109,20 @@ import {
   playwrightScreenshotTool, playwrightScreenshotSchema, handlePlaywrightScreenshot,
   playwrightExtractTool, playwrightExtractSchema, handlePlaywrightExtract,
   playwrightActionTool, playwrightActionSchema, handlePlaywrightAction,
-  playwrightPdfTool, playwrightPdfSchema, handlePlaywrightPdf
+  playwrightPdfTool, playwrightPdfSchema, handlePlaywrightPdf,
+  // Agent & Command tools
+  listAgentsTool, listAgentsSchema, handleListAgents,
+  runAgentTool, runAgentSchema, handleRunAgent,
+  listCommandsTool, listCommandsSchema, handleListCommands,
+  runCommandTool, runCommandSchema, handleRunCommand,
+  searchCommandsTool, searchCommandsSchema, handleSearchCommands,
+  // TODO Manager tools
+  todoAddTool, todoAddSchema, handleTodoAdd,
+  todoUpdateTool, todoUpdateSchema, handleTodoUpdate,
+  todoCompleteTool, todoCompleteSchema, handleTodoComplete,
+  todoListTool, todoListSchema, handleTodoList,
+  todoRemindTool, todoRemindSchema, handleTodoRemind,
+  todoClearTool, todoClearSchema, handleTodoClear
 } from "./tools/index.js";
 
 // 서버 초기화
@@ -785,16 +798,93 @@ function registerTools() {
     (args) => handlePlaywrightPdf(playwrightPdfSchema.parse(args))
   );
 
-  // 96-100. Interactive Bash Tools (5 tools)
+  // 96. list_agents
+  server.tool(
+    listAgentsTool.name,
+    listAgentsSchema.shape,
+    (args) => handleListAgents(listAgentsSchema.parse(args))
+  );
+
+  // 97. run_agent
+  server.tool(
+    runAgentTool.name,
+    runAgentSchema.shape,
+    (args) => handleRunAgent(runAgentSchema.parse(args))
+  );
+
+  // 98. list_commands
+  server.tool(
+    listCommandsTool.name,
+    listCommandsSchema.shape,
+    (args) => handleListCommands(listCommandsSchema.parse(args))
+  );
+
+  // 99. run_command
+  server.tool(
+    runCommandTool.name,
+    runCommandSchema.shape,
+    (args) => handleRunCommand(runCommandSchema.parse(args))
+  );
+
+  // 100. search_commands
+  server.tool(
+    searchCommandsTool.name,
+    searchCommandsSchema.shape,
+    (args) => handleSearchCommands(searchCommandsSchema.parse(args))
+  );
+
+  // 101. todo_add
+  server.tool(
+    todoAddTool.name,
+    todoAddSchema.shape,
+    (args) => handleTodoAdd(todoAddSchema.parse(args))
+  );
+
+  // 102. todo_update
+  server.tool(
+    todoUpdateTool.name,
+    todoUpdateSchema.shape,
+    (args) => handleTodoUpdate(todoUpdateSchema.parse(args))
+  );
+
+  // 103. todo_complete
+  server.tool(
+    todoCompleteTool.name,
+    todoCompleteSchema.shape,
+    (args) => handleTodoComplete(todoCompleteSchema.parse(args))
+  );
+
+  // 104. todo_list
+  server.tool(
+    todoListTool.name,
+    todoListSchema.shape,
+    (args) => handleTodoList(todoListSchema.parse(args))
+  );
+
+  // 105. todo_remind
+  server.tool(
+    todoRemindTool.name,
+    todoRemindSchema.shape,
+    (args) => handleTodoRemind(todoRemindSchema.parse(args))
+  );
+
+  // 106. todo_clear
+  server.tool(
+    todoClearTool.name,
+    todoClearSchema.shape,
+    (args) => handleTodoClear(todoClearSchema.parse(args))
+  );
+
+  // 107-111. Interactive Bash Tools (5 tools)
   registerInteractiveBashTools(server);
 
-  // 101-109. Skill Tools (9 tools)
+  // 112-120. Skill Tools (9 tools)
   registerSkillTools(server);
 
-  // 110-118. MCP Manager Tools (9 tools)
+  // 121-129. MCP Manager Tools (9 tools)
   registerMcpManagerTools(server);
 
-  logger.info('All tools registered (118 tools)');
+  logger.info('All tools registered (129 tools)');
 }
 
 // 메인 함수

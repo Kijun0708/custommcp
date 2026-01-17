@@ -1,10 +1,96 @@
 # LLM Router MCP
 
-Claude Code에서 여러 AI 모델(GPT, Claude, Gemini)을 전문가 팀으로 활용할 수 있게 해주는 MCP(Model Context Protocol) 서버입니다.
+> Claude Code를 팀 리더로, GPT/Gemini/Claude를 전문가 팀으로 활용하는 **"배터리 포함" MCP 서버**
+
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io/)
 
 ## 개요
 
-Claude Code가 팀 리더 역할을 하며, 특정 작업에 맞는 AI 전문가에게 업무를 위임합니다. 각 전문가는 자동으로 웹 검색과 라이브러리 문서 조회 도구를 사용할 수 있습니다.
+LLM Router MCP는 [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode) 프로젝트에서 영감을 받아 개발된 MCP 서버입니다. Claude Code가 팀 리더 역할을 하며, 특정 작업에 맞는 AI 전문가에게 업무를 위임합니다.
+
+### 주요 특징
+
+- **11개 AI 전문가**: GPT, Claude, Gemini를 역할별로 활용
+- **129개 MCP 도구**: 코드 분석, 웹 검색, Git, 브라우저 자동화 등
+- **38개+ 내장 훅**: Sisyphus 패턴, Think Mode, 자동 복구 등
+- **Sisyphus 오케스트레이션**: 작업 완료까지 자동 계속 진행
+- **자동 폴백**: Rate limit 발생 시 자동으로 다른 전문가로 전환
+
+---
+
+## 빠른 시작
+
+### 1. 저장소 클론 및 빌드
+
+```bash
+git clone https://github.com/Kijun0708/custommcp.git
+cd custommcp
+npm install
+npm run build
+```
+
+### 2. 환경변수 설정
+
+```bash
+cp .env.example .env
+```
+
+`.env` 파일 편집:
+```bash
+# 필수: Exa API (웹 검색)
+EXA_API_KEY=your_exa_api_key
+
+# 선택: Context7 API (라이브러리 문서)
+CONTEXT7_API_KEY=your_context7_api_key
+```
+
+### 3. Claude Code 연동
+
+`~/.claude/settings.local.json` 또는 `claude_desktop_config.json`에 추가:
+
+```json
+{
+  "mcpServers": {
+    "llm-router": {
+      "command": "node",
+      "args": ["/path/to/custommcp/dist/index.js"]
+    }
+  }
+}
+```
+
+### 4. AI 프로바이더 인증
+
+Claude Code에서 다음 명령 실행:
+
+```
+"인증 상태 확인해줘"  → 현재 상태 확인
+"GPT 인증해줘"       → GPT OAuth 진행
+"Claude 인증해줘"    → Claude OAuth 진행
+"Gemini 인증해줘"    → Gemini OAuth 진행
+```
+
+---
+
+## CLI 설치 (선택)
+
+```bash
+# CLI 전역 설치
+npm link
+
+# 대화형 설치
+custommcp install
+
+# 비대화형 설치 (Claude Code만)
+custommcp install --no-tui --claude=yes
+
+# 진단
+custommcp doctor
+```
+
+---
 
 ## 전문가 시스템
 
@@ -22,535 +108,394 @@ Claude Code가 팀 리더 역할을 하며, 특정 작업에 맞는 AI 전문가
 | `momus` | Gemini Pro | 비판적 분석, 품질 평가 | reviewer → explorer |
 | `prometheus` | Claude Sonnet | 창의적 솔루션, 혁신적 접근 | strategist → researcher |
 
-## 주요 기능
+---
 
-### Function Calling
-전문가들이 직접 도구를 호출하여 최신 정보를 수집합니다:
-- **web_search**: Exa API를 통한 웹 검색
-- **get_library_docs**: Context7 API를 통한 라이브러리 문서 조회
-- **search_libraries**: 라이브러리 검색
+## 핵심 기능
 
-### 자동 폴백
-Rate limit 발생 시 자동으로 다른 전문가로 전환됩니다.
+### Sisyphus 오케스트레이션
 
-### 응답 캐싱
-동일한 질문에 대한 응답을 캐싱하여 비용과 지연 시간을 절약합니다.
+oh-my-opencode 스타일의 **작업 완료 강제 메커니즘**:
 
-### LSP Integration
-IDE급 코드 이해 능력을 제공합니다:
-- **정의로 이동**: 심볼의 정의 위치 찾기
-- **참조 찾기**: 심볼이 사용된 모든 위치
-- **타입 정보**: Hover 시 타입/문서 정보
-- **워크스페이스 심볼**: 프로젝트 전체 심볼 검색
+```
+┌─────────────────────────────────────────────────────────┐
+│  Sisyphus 오케스트레이션                                 │
+├─────────────────────────────────────────────────────────┤
+│  1. 코드 수정은 반드시 전문가에게 위임                    │
+│  2. 서브에이전트 응답은 반드시 검증 (Subagents LIE)       │
+│  3. 모든 작업이 완료될 때까지 계속 진행                   │
+└─────────────────────────────────────────────────────────┘
+```
 
-### AST-Grep
-25+ 언어를 지원하는 AST 기반 코드 검색/변환:
-- **패턴 검색**: 구조적 코드 패턴 매칭
-- **코드 변환**: 안전한 대규모 리팩토링
-- **지원 언어**: TypeScript, JavaScript, Python, Rust, Go, Java 등
+- **위임 강제**: 오케스트레이터가 직접 코드 수정 시 경고
+- **검증 리마인더**: 서브에이전트가 "완료" 주장 시 검증 체크리스트 표시
+- **자동 계속**: 세션 유휴 상태에서 미완료 작업 감지 시 자동 프롬프트 주입
+- **볼더 상태**: 작업 진행 상태 추적 및 복구
 
-### Context Management
-장시간 세션 안정성을 위한 컨텍스트 관리:
-- **Context Monitor**: 토큰 사용량 추적, 70%+ 경고
-- **Output Truncator**: 남은 컨텍스트 기반 동적 출력 조절
-- **Todo Enforcer**: 미완료 작업 감지 및 강제 완료
+### Think Mode (확장 사고)
 
-### Stability & Recovery
-API 에러 및 편집 실패 자동 복구:
-- **Session Recovery**: API 에러 분류, 서킷 브레이커, 자동 재시도
-- **Edit Recovery**: 편집 에러 분류, 복구 제안
-- **Comment Checker**: AI 생성 불필요 코멘트 감지
+복잡한 문제에 대한 깊은 분석:
 
-### Directory Injector
-프로젝트 컨텍스트 자동 주입:
-- **AGENTS.md**: 에이전트 지시사항 자동 로드
-- **README.md**: 프로젝트 설명 자동 로드
-- **.claude/rules/**: 커스텀 규칙 자동 로드
+| 키워드 | 레벨 | 토큰 예산 |
+|--------|------|----------|
+| `think`, `생각` | normal | 10,000 |
+| `think hard`, `깊이 생각` | deep | 20,000 |
+| `ultrathink`, `maximum reasoning` | extreme | 50,000 |
+
+```
+"이 문제 think hard 해서 분석해줘"
+→ Deep Thinking Mode 활성화, 5단계 분석 프로세스 적용
+```
 
 ### Magic Keywords
-프롬프트에 키워드를 포함하면 자동으로 해당 모드가 활성화됩니다:
+
+프롬프트에 키워드를 포함하면 자동으로 해당 모드가 활성화:
 
 | 키워드 | 트리거 | 용도 |
 |--------|--------|------|
-| 🚀 ultrawork | ultrawork, ulw | 최대 성능 오케스트레이션 |
-| 🔍 search | search, find, 찾아 | 멀티 에이전트 병렬 검색 |
-| 🔬 analyze | analyze, 분석 | 심층 분석 모드 |
-| 🏊 deepdive | deepdive, 철저히 | 철저한 연구 모드 |
-| ⚡ quickfix | quickfix, 빨리 | 빠른 버그 수정 |
-| 🔧 refactor | refactor, 리팩토링 | 코드 리팩토링 |
-| 👀 review | review, 리뷰 | 코드 리뷰 |
-| 📝 document | document, 문서화 | 문서화 모드 |
+| ultrawork | `ultrawork`, `ulw` | 최대 성능 오케스트레이션 |
+| search | `search`, `find`, `찾아` | 멀티 에이전트 병렬 검색 |
+| analyze | `analyze`, `분석` | 심층 분석 모드 |
+| deepdive | `deepdive`, `철저히` | 철저한 연구 모드 |
+| quickfix | `quickfix`, `빨리` | 빠른 버그 수정 |
+| refactor | `refactor`, `리팩토링` | 코드 리팩토링 |
+| review | `review`, `리뷰` | 코드 리뷰 |
+| document | `document`, `문서화` | 문서화 모드 |
 
-### Ensemble System
-여러 전문가의 응답을 조합하여 더 나은 결과를 도출:
-- **parallel**: 병렬 실행 후 모든 응답 반환
-- **synthesize**: 응답들을 하나로 합성
-- **debate**: 전문가 간 토론
-- **vote**: 투표로 결정
-- **best_of_n**: 최선의 응답 선택
+---
 
-### Cost Tracking
-API 비용 추적 및 예산 관리:
-- 세션/일간/월간 비용 추적
-- 예산 한도 설정 및 알림
-- 프로바이더/전문가/모델별 통계
+## Agent & Command 시스템
 
-### Hook System
-이벤트 기반 확장 시스템 (106개 훅):
-- 도구 호출 전/후 인터셉트
-- 전문가 호출 전/후 인터셉트
-- 외부 쉘 명령 훅 지원
+Claude Code 스타일의 에이전트와 명령어 시스템:
 
-### Interactive Bash (Tmux)
-대화형 터미널 세션 관리:
-- **세션 생성**: tmux 기반 영구 세션
-- **명령 실행**: 출력 캡처 및 타임아웃 관리
-- **세션 관리**: 목록 조회, 종료, 출력 읽기
+### 에이전트 정의
 
-### Skill System
-YAML/JSON/MD 기반 스킬 정의 및 실행:
-- **스킬 로드**: 프로젝트/사용자/전역 스코프 지원
-- **MCP 프로세스**: 스킬별 MCP 서버 자동 관리
-- **동적 실행**: 컨텍스트 변수 치환
+`~/.claude/agents/` 또는 `.claude/agents/`에 마크다운 파일 생성:
 
-### MCP Server Manager
-Claude Code 호환 MCP 서버 설정 관리:
-- **설정 로드**: `claude_desktop_config.json` 호환
-- **서버 관리**: 시작/중지/상태 확인
-- **다중 스코프**: 프로젝트/사용자/전역 설정
+```markdown
+---
+name: research-agent
+description: 심층 연구 전문가
+tools:
+  - WebSearch
+  - Read
+model: sonnet
+---
 
-### Git Master
-고급 Git 작업 도구:
-- **Atomic Commit**: 변경사항 자동 그룹화 및 커밋
-- **History Search**: 커밋 메시지/diff 검색
-- **Rebase Planner**: 충돌 예측 및 계획 수립
-- **Squash Helper**: 커밋 병합 미리보기
-- **Branch Analysis**: 브랜치 비교 및 분석
-
-### Playwright
-브라우저 자동화 및 웹 스크래핑:
-- **Screenshot**: 웹 페이지 캡처
-- **PDF 변환**: 웹 페이지를 PDF로 저장
-- **콘텐츠 추출**: 텍스트/HTML/마크다운/링크/이미지
-- **액션 실행**: 클릭, 입력, 스크롤 등
-
-### Grep.app Integration
-공개 코드 검색 (GitHub/GitLab):
-- **코드 패턴 검색**: 정규식 지원
-- **언어 필터**: 특정 프로그래밍 언어로 필터링
-- **레포지토리 필터**: 특정 저장소 검색
-
-### Session Transcript
-과거 세션 기록 조회:
-- **세션 목록**: 프로젝트별 필터링
-- **세션 읽기**: 메시지 히스토리 조회
-- **세션 검색**: 키워드로 검색
-
-### Command Discovery
-프로젝트 명령어 자동 발견:
-- **스캔 위치**: package.json, Makefile, scripts/
-- **명령 실행**: 발견된 명령어 실행
-- **태그 필터**: 카테고리별 필터링
-
-### Advanced Hooks (Phase 1-4)
-
-#### Core Hooks
-- **Rules Injector**: `.claude/rules/` 규칙 자동 주입
-- **Think Mode**: 확장 사고 프로세스 활성화
-- **Auto Slash Command**: 슬래시 명령 자동 실행
-- **Sisyphus Orchestrator**: 반복 작업 패턴 감지
-
-#### Stability Hooks
-- **Anthropic Context Recovery**: 컨텍스트 에러 자동 복구
-- **Non-Interactive Env**: 비대화형 환경 안전 처리
-- **Start Work**: 세션 체크포인트 및 복원
-- **Task Resume Info**: 재개 정보 자동 추출
-
-#### UX Hooks
-- **Auto Update Checker**: 버전 업데이트 알림
-- **Task Toast Manager**: 토스트 스타일 알림
-- **Hook Message Injector**: 메시지 큐 주입
-- **Prometheus MD Only**: 마크다운 포맷 강제
-
-## 설치
-
-```bash
-# 저장소 클론
-git clone https://github.com/Kijun0708/custommcp.git
-cd custommcp
-
-# 의존성 설치
-npm install
-
-# 빌드
-npm run build
+당신은 연구 전문가입니다. 주어진 주제에 대해 철저히 조사하고
+근거 있는 분석을 제공합니다.
 ```
 
-**CLIProxyAPI가 포함되어 있습니다** (`vendor/cliproxy/cli-proxy-api.exe`)
+### 명령어 정의
 
-## 설정
+`~/.claude/commands/` 또는 `.claude/commands/`에 마크다운 파일 생성:
 
-### 환경변수 (.env)
+```markdown
+---
+name: review
+description: 코드 리뷰 수행
+aliases:
+  - cr
+---
 
-```bash
-# Exa API (웹 검색) - 필수
-EXA_API_KEY=your_exa_api_key
-
-# Context7 API (라이브러리 문서) - 선택
-CONTEXT7_API_KEY=your_context7_api_key
-
-# CLIProxyAPI 설정 (기본값 사용 시 생략 가능)
-# CLIPROXY_URL=http://localhost:8787
-# CLIPROXY_PATH=vendor/cliproxy/cli-proxy-api.exe
-
-# 캐시 설정 (선택)
-# CACHE_ENABLED=true
-# CACHE_TTL_MS=1800000
+다음 코드를 리뷰해주세요:
+1. 버그 가능성
+2. 성능 이슈
+3. 보안 취약점
+4. 코드 스타일
 ```
 
-### Claude Code 연동
+### MCP 도구
 
-`claude_desktop_config.json`에 추가:
+| 도구 | 설명 |
+|------|------|
+| `list_agents` | 사용 가능한 에이전트 목록 |
+| `run_agent` | 에이전트 실행 |
+| `list_commands` | 슬래시 명령어 목록 |
+| `run_command` | 명령어 실행 |
+| `search_commands` | 명령어 검색 |
 
-```json
-{
-  "mcpServers": {
-    "llm-router": {
-      "command": "node",
-      "args": ["C:/project/custommcp/dist/index.js"]
-    }
-  }
-}
-```
+---
 
-### AI 프로바이더 인증
+## TODO 관리 시스템
 
-MCP 연동 후 각 AI 프로바이더 OAuth 인증:
+작업 추적을 위한 TODO 관리 도구:
 
-```
-"인증 상태 확인해줘"  → auth_status로 현재 상태 확인
-"GPT 인증해줘"       → auth_gpt로 브라우저 OAuth 진행
-"Claude 인증해줘"    → auth_claude
-"Gemini 인증해줘"    → auth_gemini
-```
+| 도구 | 설명 | 예시 |
+|------|------|------|
+| `todo_add` | TODO 추가 | `{ "content": "인증 구현", "priority": "high", "tags": ["auth"] }` |
+| `todo_update` | 상태 변경 | `{ "id": "todo-1", "status": "in_progress" }` |
+| `todo_complete` | 완료 처리 | `{ "id": "todo-1" }` |
+| `todo_list` | 목록 조회 | `{ "status": "active" }` |
+| `todo_remind` | 리마인더 | `{ "includeCompleted": false }` |
+| `todo_clear` | 완료 항목 정리 | `{ "status": "completed" }` |
 
-인증 정보는 `~/.cli-proxy-api/` 폴더에 저장됩니다.
+### 상태 및 우선순위
 
-## MCP 도구 목록
+**상태**: `pending` → `in_progress` → `completed` / `blocked`
+
+**우선순위**: `low` (파랑) → `normal` (초록) → `high` (노랑) → `critical` (빨강)
+
+---
+
+## 주요 도구 카테고리
 
 ### 전문가 상담
 | 도구 | 설명 |
 |------|------|
 | `consult_expert` | 전문가에게 직접 질문 |
 | `route_by_category` | 카테고리 기반 자동 라우팅 |
+| `ensemble_query` | 여러 전문가 의견 종합 |
 
-### 백그라운드 실행
+### 코드 분석
 | 도구 | 설명 |
 |------|------|
-| `background_expert_start` | 비동기 전문가 실행 |
-| `background_expert_result` | 결과 조회 |
-| `background_expert_cancel` | 작업 취소 |
-| `background_expert_list` | 작업 목록 |
-
-### 워크플로우
-| 도구 | 설명 |
-|------|------|
-| `design_with_experts` | 다중 전문가 설계 워크플로우 |
-| `review_code` | 코드 리뷰 워크플로우 |
-| `research_topic` | 주제 리서치 워크플로우 |
+| `lsp_get_definition` | 심볼 정의 위치 |
+| `lsp_get_references` | 심볼 참조 찾기 |
+| `lsp_get_hover` | 타입/문서 정보 |
+| `ast_grep_search` | AST 패턴 검색 |
+| `ast_grep_replace` | AST 패턴 치환 |
 
 ### 검색 및 문서
 | 도구 | 설명 |
 |------|------|
 | `web_search` | Exa 웹 검색 |
 | `get_library_docs` | 라이브러리 문서 조회 |
-| `search_libraries` | 라이브러리 검색 |
+| `grep_app` | GitHub/GitLab 코드 검색 |
 
-### 인증 관리
+### Git
 | 도구 | 설명 |
 |------|------|
-| `auth_status` | 모든 프로바이더 인증 상태 확인 |
-| `auth_gpt` | GPT/Codex OAuth 인증 |
-| `auth_claude` | Claude OAuth 인증 |
-| `auth_gemini` | Gemini OAuth 인증 |
-
-### 관리
-| 도구 | 설명 |
-|------|------|
-| `llm_router_health` | 서버 상태 확인, 캐시 관리 |
-| `set_expert_model` | 전문가별 모델 변경 |
-
-### LSP & AST-Grep
-| 도구 | 설명 |
-|------|------|
-| `lsp_get_definition` | 심볼 정의 위치 찾기 |
-| `lsp_get_references` | 심볼 참조 찾기 |
-| `lsp_get_hover` | 타입/문서 정보 조회 |
-| `lsp_workspace_symbols` | 워크스페이스 심볼 검색 |
-| `lsp_check_server` | LSP 서버 상태 확인 |
-| `ast_grep_search` | AST 패턴 검색 |
-| `ast_grep_replace` | AST 패턴 치환 |
-| `ast_grep_languages` | 지원 언어 목록 |
-
-### Context Management
-| 도구 | 설명 |
-|------|------|
-| `context_status` | 컨텍스트 사용량 조회 |
-| `context_config` | 컨텍스트 모니터 설정 |
-| `truncator_config` | 출력 truncator 설정 |
-| `todo_enforcer` | 미완료 작업 관리 |
-
-### Stability & Recovery
-| 도구 | 설명 |
-|------|------|
-| `session_recovery` | 세션 복구 상태/설정 |
-| `edit_recovery` | 편집 복구 상태/설정 |
-| `comment_checker` | 코멘트 체커 상태/설정 |
-
-### Directory & Keywords
-| 도구 | 설명 |
-|------|------|
-| `directory_injector` | 디렉토리 인젝터 관리 |
-| `magic_keywords` | 매직 키워드 관리 |
-
-### Ensemble System
-| 도구 | 설명 |
-|------|------|
-| `ensemble_query` | 앙상블 쿼리 실행 |
-| `ensemble_preset` | 프리셋으로 앙상블 실행 |
-| `ensemble_presets_list` | 프리셋 목록 조회 |
-
-### Cost Tracking
-| 도구 | 설명 |
-|------|------|
-| `cost_status` | 비용 현황 조회 |
-| `cost_history` | 비용 히스토리 |
-| `cost_stats` | 비용 통계 |
-| `cost_reset` | 비용 초기화 |
-| `cost_budget` | 예산 설정 |
-| `cost_system_toggle` | 비용 추적 활성화/비활성화 |
-
-### Hook System
-| 도구 | 설명 |
-|------|------|
-| `hook_status` | 훅 상태 조회 |
-| `hook_toggle` | 개별 훅 활성화/비활성화 |
-| `hook_system_toggle` | 훅 시스템 전체 토글 |
-| `external_hook_add` | 외부 훅 추가 |
-| `external_hook_remove` | 외부 훅 제거 |
-| `external_hook_list` | 외부 훅 목록 |
-
-### Keyword Detector
-| 도구 | 설명 |
-|------|------|
-| `keyword_add` | 키워드 규칙 추가 |
-| `keyword_remove` | 키워드 규칙 제거 |
-| `keyword_list` | 키워드 규칙 목록 |
-| `keyword_detect` | 텍스트에서 키워드 감지 |
-| `keyword_toggle` | 키워드 규칙 토글 |
-| `keyword_system_toggle` | 키워드 시스템 토글 |
-
-### Permission System
-| 도구 | 설명 |
-|------|------|
-| `permission_check` | 권한 확인 |
-| `permission_grant` | 권한 승인 |
-| `permission_deny` | 권한 거부 |
-| `permission_list` | 권한 목록 |
-| `permission_pattern_toggle` | 패턴 토글 |
-| `permission_system_toggle` | 시스템 토글 |
-| `permission_clear_session` | 세션 권한 초기화 |
-
-### Session Memory
-| 도구 | 설명 |
-|------|------|
-| `memory_add` | 메모리 추가 |
-| `memory_list` | 메모리 목록 |
-| `memory_clear` | 메모리 초기화 |
-
-### Orchestration
-| 도구 | 설명 |
-|------|------|
-| `orchestrate_task` | 자동 태스크 오케스트레이션 |
-| `ralph_loop_start` | Ralph Loop 시작 |
-| `ralph_loop_cancel` | Ralph Loop 취소 |
-| `ralph_loop_status` | Ralph Loop 상태 |
-
-### Boulder State
-| 도구 | 설명 |
-|------|------|
-| `boulder_status` | 볼더 상태 조회 |
-| `boulder_recover` | 볼더 복구 |
-| `boulder_detail` | 볼더 상세 정보 |
-
-### Interactive Bash (Tmux)
-| 도구 | 설명 |
-|------|------|
-| `interactive_bash_create` | 대화형 세션 생성 |
-| `interactive_bash_send` | 명령어 전송 |
-| `interactive_bash_read` | 세션 출력 읽기 |
-| `interactive_bash_list` | 세션 목록 |
-| `interactive_bash_kill` | 세션 종료 |
-
-### Skill System
-| 도구 | 설명 |
-|------|------|
-| `skill_list` | 스킬 목록 조회 |
-| `skill_get` | 스킬 상세 정보 |
-| `skill_execute` | 스킬 실행 |
-| `skill_activate` | 스킬 활성화 |
-| `skill_deactivate` | 스킬 비활성화 |
-| `skill_reload` | 스킬 새로고침 |
-| `skill_stats` | 스킬 통계 |
-| `skill_mcp_start` | 스킬 MCP 시작 |
-| `skill_mcp_stop` | 스킬 MCP 중지 |
-
-### MCP Server Manager
-| 도구 | 설명 |
-|------|------|
-| `mcp_server_list` | MCP 서버 목록 |
-| `mcp_server_get` | 서버 상세 정보 |
-| `mcp_server_start` | 서버 시작 |
-| `mcp_server_stop` | 서버 중지 |
-| `mcp_server_restart` | 서버 재시작 |
-| `mcp_server_status` | 서버 상태 |
-| `mcp_server_logs` | 서버 로그 |
-| `mcp_config_reload` | 설정 새로고침 |
-| `mcp_config_stats` | 설정 통계 |
-
-### Git Master
-| 도구 | 설명 |
-|------|------|
-| `git_atomic_commit` | 변경사항 분석 및 atomic 커밋 |
+| `git_atomic_commit` | 자동 그룹화 커밋 |
 | `git_history_search` | 커밋 히스토리 검색 |
-| `git_rebase_planner` | 리베이스 계획 수립 |
-| `git_squash_helper` | 커밋 스쿼시 도우미 |
+| `git_rebase_planner` | 리베이스 계획 |
+| `git_squash_helper` | 커밋 스쿼시 |
 | `git_branch_analysis` | 브랜치 분석 |
 
-### Playwright
+### 브라우저 자동화
 | 도구 | 설명 |
 |------|------|
-| `playwright_screenshot` | 웹 페이지 스크린샷 |
-| `playwright_extract` | 콘텐츠 추출 |
-| `playwright_action` | 브라우저 액션 실행 |
+| `playwright_screenshot` | 웹 페이지 캡처 |
 | `playwright_pdf` | PDF 생성 |
+| `playwright_extract` | 콘텐츠 추출 |
+| `playwright_action` | 클릭/입력 등 |
 
-### Grep.app
+### 세션 관리
 | 도구 | 설명 |
 |------|------|
-| `grep_app` | 공개 코드 검색 |
-| `grep_app_languages` | 지원 언어 목록 |
-
-### Session Transcript
-| 도구 | 설명 |
-|------|------|
-| `session_list` | 세션 목록 조회 |
-| `session_read` | 세션 내용 읽기 |
+| `session_list` | 세션 목록 |
+| `session_read` | 세션 내용 |
 | `session_search` | 세션 검색 |
-| `session_info` | 세션 정보 |
+| `interactive_bash_create` | Tmux 세션 생성 |
 
-### Command Discovery
-| 도구 | 설명 |
-|------|------|
-| `command_list` | 명령어 목록 |
-| `command_get` | 명령어 상세 정보 |
-| `command_execute` | 명령어 실행 |
-| `command_rescan` | 명령어 재스캔 |
-| `command_config` | 명령어 설정 |
+---
+
+## 훅 시스템
+
+38개 이상의 내장 훅으로 동작 확장:
+
+### Core Hooks
+| 훅 | 설명 |
+|----|------|
+| `sisyphus-orchestrator` | 작업 완료 강제 오케스트레이션 |
+| `todo-continuation-enforcer` | TODO 완료 강제 |
+| `think-mode` | 확장 사고 모드 |
+| `rules-injector` | `.claude/rules/` 규칙 자동 주입 |
+
+### Stability Hooks
+| 훅 | 설명 |
+|----|------|
+| `session-recovery` | 세션 에러 자동 복구 |
+| `edit-error-recovery` | 편집 에러 복구 |
+| `preemptive-compaction` | 선제적 컨텍스트 압축 |
+| `context-window-monitor` | 컨텍스트 사용량 모니터링 |
+
+### UX Hooks
+| 훅 | 설명 |
+|----|------|
+| `auto-update-checker` | 버전 업데이트 알림 |
+| `task-toast-manager` | 작업 완료 알림 |
+| `magic-keywords` | 매직 키워드 감지 |
+| `directory-injector` | AGENTS.md/README.md 자동 로드 |
+
+---
 
 ## 사용 예시
 
-### 전문가 상담
+### 기본 사용
 ```
-"strategist에게 이 아키텍처에 대해 물어봐줘"
-"React 19 새 기능을 researcher에게 조사시켜줘"
-```
-
-### 코드 리뷰
-```
-"이 코드 리뷰해줘" → review_code 워크플로우 실행
+"strategist에게 이 아키텍처 검토해달라고 해줘"
+"researcher로 React 19 변경사항 조사해줘"
+"reviewer에게 이 PR 코드 리뷰 부탁해"
 ```
 
-### 설계 워크플로우
+### 매직 키워드
 ```
-"인증 시스템 설계해줘" → design_with_experts 실행
+"ultrawork로 전체 인증 시스템 구현해줘"
+→ 최대 성능 모드, 자동 위임, 검증, 완료까지 진행
+
+"이 버그 quickfix 해줘"
+→ 빠른 수정 모드
+
+"이 코드 deepdive 분석해줘"
+→ 철저한 분석 모드
 ```
 
-### 매직 키워드 사용
+### Think Mode
 ```
-"ultrawork로 전체 기능 구현해줘"  → 최대 성능 오케스트레이션 모드
-"이 버그 quickfix 해줘"         → 빠른 버그 수정 모드
-"코드 deepdive 분석해줘"        → 철저한 연구 모드
+"이 알고리즘 think hard 해서 최적화 방법 찾아줘"
+→ 5단계 심층 분석 적용
+
+"ultrathink로 이 아키텍처 설계해줘"
+→ 최대 추론 모드 (50K 토큰 예산)
+```
+
+### 에이전트 실행
+```
+"list_agents로 사용 가능한 에이전트 보여줘"
+"run_agent로 research-agent에게 'GraphQL vs REST' 조사시켜줘"
+```
+
+### TODO 관리
+```
+"todo_add로 '인증 구현' 작업 추가해줘, 우선순위 high"
+"todo_list로 진행 중인 작업 보여줘"
+"todo_remind로 남은 작업 리마인더 해줘"
 ```
 
 ### LSP 활용
 ```
-"이 함수의 정의 위치 찾아줘"     → lsp_get_definition
-"이 변수가 어디서 사용되는지"    → lsp_get_references
+"이 함수 정의 위치 찾아줘"     → lsp_get_definition
+"이 변수 참조 전부 찾아줘"      → lsp_get_references
 ```
 
-### AST-Grep 활용
+### Git 작업
 ```
-"console.log 호출 전부 찾아줘"   → ast_grep_search
-"deprecated 함수를 새 함수로 변경" → ast_grep_replace
-```
-
-### 앙상블 쿼리
-```
-"여러 전문가 의견 종합해줘"      → ensemble_query (synthesize)
-"전문가들 토론시켜줘"           → ensemble_query (debate)
+"변경사항 분석해서 atomic 커밋해줘"  → git_atomic_commit
+"'auth' 관련 커밋 히스토리 검색"    → git_history_search
 ```
 
-### Interactive Bash
-```
-"터미널 세션 만들어줘"          → interactive_bash_create
-"npm run dev 실행해"           → interactive_bash_send
-"세션 출력 보여줘"              → interactive_bash_read
+---
+
+## 환경 변수
+
+```bash
+# 필수
+EXA_API_KEY=                    # Exa 웹 검색 API 키
+
+# 선택
+CONTEXT7_API_KEY=               # Context7 라이브러리 문서 API 키
+CLIPROXY_URL=http://localhost:8787  # CLIProxyAPI 엔드포인트
+CLIPROXY_PATH=vendor/cliproxy/cli-proxy-api.exe  # CLIProxyAPI 경로
+
+# 캐시 (선택)
+CACHE_ENABLED=true              # 응답 캐싱 활성화
+CACHE_TTL_MS=1800000           # 캐시 TTL (30분)
+
+# 동시성 (선택)
+CONCURRENCY_ANTHROPIC=3         # Anthropic API 동시 요청 수
+CONCURRENCY_OPENAI=3            # OpenAI API 동시 요청 수
+CONCURRENCY_GOOGLE=5            # Google API 동시 요청 수
 ```
 
-### Git Master
+---
+
+## 프로젝트 구조
+
 ```
-"변경사항 atomic 커밋해줘"       → git_atomic_commit
-"'authentication' 관련 커밋 찾아" → git_history_search
-"최근 5개 커밋 스쿼시 미리보기"   → git_squash_helper
+custommcp/
+├── src/
+│   ├── index.ts              # MCP 서버 진입점
+│   ├── experts/              # 전문가 정의
+│   ├── tools/                # MCP 도구 (129개)
+│   ├── hooks/                # 훅 시스템
+│   │   └── builtin/          # 내장 훅 (38개+)
+│   ├── features/             # 기능 모듈
+│   │   ├── boulder-state/    # 볼더 상태 관리
+│   │   ├── claude-code-agent-loader/   # 에이전트 로더
+│   │   ├── claude-code-command-loader/ # 명령어 로더
+│   │   ├── skill-system/     # 스킬 시스템
+│   │   └── mcp-loader/       # MCP 서버 관리
+│   ├── services/             # 핵심 서비스
+│   │   ├── expert-router.ts  # 전문가 라우팅
+│   │   └── cliproxy-client.ts # CLIProxyAPI 클라이언트
+│   └── cli/                  # CLI 도구
+├── vendor/
+│   └── cliproxy/             # CLIProxyAPI 바이너리
+└── dist/                     # 빌드 출력
 ```
 
-### Playwright
-```
-"https://example.com 스크린샷"   → playwright_screenshot
-"이 페이지 PDF로 저장"          → playwright_pdf
-"페이지에서 링크 추출해줘"       → playwright_extract
-```
+---
 
-### Skill System
-```
-"등록된 스킬 보여줘"            → skill_list
-"commit 스킬 실행해"           → skill_execute
-```
-
-### Session Transcript
-```
-"이전 세션 기록 보여줘"         → session_list
-"어제 작업 내용 검색해줘"        → session_search
-```
-
-## 기술 스택
-
-- **Language**: TypeScript
-- **Runtime**: Node.js
-- **Transport**: stdio
-- **Validation**: Zod
-- **Logging**: pino
-- **Caching**: lru-cache
-
-## 프로젝트 통계
+## 통계
 
 | 항목 | 수량 |
 |------|------|
-| MCP 도구 | 118개 |
-| 훅 | 106개 (101 내장 + 5 외부) |
+| MCP 도구 | 129개 |
+| 내장 훅 | 38개+ |
 | 전문가 | 11개 |
 | 기능 모듈 | 15+ |
+
+---
+
+## oh-my-opencode와의 관계
+
+이 프로젝트는 [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode)에서 영감을 받았습니다.
+
+### 동일한 기능
+- Sisyphus 스타일 작업 완료 강제
+- Think Mode (확장 사고)
+- Agent/Command 로더
+- Rules Injector
+- TODO Continuation Enforcer
+- Preemptive Compaction
+- Session Recovery
+
+### 차이점
+| 항목 | oh-my-opencode | custommcp |
+|------|----------------|-----------|
+| 아키텍처 | Claude Code 플러그인 | MCP 서버 |
+| 런타임 | Bun | Node.js |
+| 전문가 수 | 7개 | 11개 |
+| 도구 수 | 13개 | 129개 |
+| 세션 제어 | 직접 제어 | MCP 프로토콜 통해 간접 |
+
+---
+
+## 문제 해결
+
+### CLIProxyAPI 연결 실패
+```bash
+# CLIProxyAPI 수동 실행
+./vendor/cliproxy/cli-proxy-api.exe
+
+# 또는 환경변수로 URL 지정
+CLIPROXY_URL=http://localhost:8787
+```
+
+### 인증 문제
+```
+"auth_status" 로 현재 상태 확인
+"auth_gpt/claude/gemini" 로 재인증
+```
+
+### LSP 서버 미동작
+```
+"lsp_check_server" 로 서버 상태 확인
+# TypeScript: npx typescript-language-server --stdio
+# Python: pylsp
+```
+
+### 컨텍스트 초과
+```
+"context_status" 로 사용량 확인
+# 자동 압축이 70%에서 트리거됨
+```
+
+---
+
+## 기여
+
+이슈와 PR을 환영합니다.
 
 ## 라이선스
 

@@ -20,6 +20,8 @@ import {
   ImplementationAttempt,
   WorkflowPhase,
   TaskIntent,
+  BoulderPlanItem,
+  ContinuationState,
   DEFAULT_BOULDER_CONFIG
 } from './types.js';
 import {
@@ -568,6 +570,290 @@ ${b.relevantFiles?.join('\n') || 'None identified'}
     }
 
     return suggestions;
+  }
+
+  // ====== Sisyphus-style Plan Management ======
+
+  /**
+   * Adds a plan item to the active boulder (Sisyphus style).
+   */
+  addPlanItem(content: string, order?: number): BoulderState | null {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder) {
+      logger.warn('No active boulder to add plan item');
+      return null;
+    }
+
+    if (!boulder.activePlan) {
+      boulder.activePlan = [];
+    }
+
+    const planItem: BoulderPlanItem = {
+      content,
+      status: 'pending',
+      addedAt: new Date().toISOString(),
+      order: order ?? boulder.activePlan.length
+    };
+
+    boulder.activePlan.push(planItem);
+    boulder.activePlan.sort((a, b) => a.order - b.order);
+
+    writeBoulderState(this.directory, boulder, this.config);
+
+    logger.debug({
+      boulderId: boulder.id,
+      planItemCount: boulder.activePlan.length,
+      content: content.substring(0, 50)
+    }, 'Plan item added');
+
+    return boulder;
+  }
+
+  /**
+   * Updates a plan item status (Sisyphus style).
+   */
+  updatePlanItemStatus(
+    index: number,
+    status: 'pending' | 'in_progress' | 'completed' | 'skipped'
+  ): BoulderState | null {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder || !boulder.activePlan) {
+      return null;
+    }
+
+    if (index >= 0 && index < boulder.activePlan.length) {
+      boulder.activePlan[index].status = status;
+      if (status === 'completed' || status === 'skipped') {
+        boulder.activePlan[index].completedAt = new Date().toISOString();
+      }
+
+      writeBoulderState(this.directory, boulder, this.config);
+
+      logger.debug({
+        boulderId: boulder.id,
+        index,
+        status
+      }, 'Plan item status updated');
+    }
+
+    return boulder;
+  }
+
+  /**
+   * Gets pending plan items (Sisyphus style).
+   */
+  getPendingPlanItems(): BoulderPlanItem[] {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder || !boulder.activePlan) {
+      return [];
+    }
+
+    return boulder.activePlan.filter(
+      item => item.status === 'pending' || item.status === 'in_progress'
+    );
+  }
+
+  /**
+   * Sets multiple plan items at once (Sisyphus style).
+   */
+  setPlan(items: string[]): BoulderState | null {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder) {
+      return null;
+    }
+
+    boulder.activePlan = items.map((content, index) => ({
+      content,
+      status: 'pending' as const,
+      addedAt: new Date().toISOString(),
+      order: index
+    }));
+
+    writeBoulderState(this.directory, boulder, this.config);
+
+    logger.info({
+      boulderId: boulder.id,
+      planItemCount: items.length
+    }, 'Boulder plan set');
+
+    return boulder;
+  }
+
+  /**
+   * Records activity to prevent idle detection (Sisyphus style).
+   */
+  recordActivity(): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder) {
+      boulder.lastActivityAt = new Date().toISOString();
+      writeBoulderState(this.directory, boulder, this.config);
+    }
+  }
+
+  /**
+   * Adds a pending file path (Sisyphus style).
+   */
+  addPendingFilePath(filePath: string): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder) {
+      if (!boulder.pendingFilePaths) {
+        boulder.pendingFilePaths = [];
+      }
+      if (!boulder.pendingFilePaths.includes(filePath)) {
+        boulder.pendingFilePaths.push(filePath);
+        writeBoulderState(this.directory, boulder, this.config);
+      }
+    }
+  }
+
+  /**
+   * Removes a pending file path (Sisyphus style).
+   */
+  removePendingFilePath(filePath: string): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder && boulder.pendingFilePaths) {
+      boulder.pendingFilePaths = boulder.pendingFilePaths.filter(p => p !== filePath);
+      writeBoulderState(this.directory, boulder, this.config);
+    }
+  }
+
+  /**
+   * Clears all pending file paths (Sisyphus style).
+   */
+  clearPendingFilePaths(): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder) {
+      boulder.pendingFilePaths = [];
+      writeBoulderState(this.directory, boulder, this.config);
+    }
+  }
+
+  /**
+   * Sets last event was abort error flag (Sisyphus style).
+   */
+  setLastEventWasAbortError(wasAbort: boolean): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder) {
+      boulder.lastEventWasAbortError = wasAbort;
+      writeBoulderState(this.directory, boulder, this.config);
+    }
+  }
+
+  /**
+   * Increments continuation count (Sisyphus style).
+   */
+  incrementContinuationCount(): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder) {
+      if (!boulder.continuationState) {
+        boulder.continuationState = {
+          continuationCount: 0,
+          isBlocked: false
+        };
+      }
+      boulder.continuationState.continuationCount++;
+      boulder.continuationState.lastContinuationAt = new Date().toISOString();
+      writeBoulderState(this.directory, boulder, this.config);
+    }
+  }
+
+  /**
+   * Generates continuation prompt for pending work (Sisyphus style).
+   */
+  generateContinuationPrompt(): string | null {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder) {
+      return null;
+    }
+
+    const pendingItems = this.getPendingPlanItems();
+    if (pendingItems.length === 0) {
+      return null;
+    }
+
+    const itemList = pendingItems
+      .slice(0, 5)
+      .map((item, i) => `${i + 1}. [${item.status}] ${item.content}`)
+      .join('\n');
+
+    const moreCount = pendingItems.length > 5 ? pendingItems.length - 5 : 0;
+
+    return `[SYSTEM REMINDER - BOULDER CONTINUATION]
+
+⚠️ **작업이 완료되지 않았습니다!** (Boulder: ${boulder.id})
+
+**현재 상태:**
+- Phase: ${boulder.currentPhase}
+- Attempts: ${boulder.implementationAttempts.length}/${boulder.maxAttempts}
+
+**남은 작업 목록:**
+${itemList}${moreCount > 0 ? `\n... 외 ${moreCount}개 항목` : ''}
+
+📋 **지시사항:**
+- 위 작업 목록의 항목들을 순서대로 처리하세요
+- 각 항목 완료 시 상태를 업데이트하세요
+- 모든 항목이 완료될 때까지 계속 진행하세요
+
+🎯 **원래 요청:**
+${boulder.request.substring(0, 200)}${boulder.request.length > 200 ? '...' : ''}`;
+  }
+
+  /**
+   * Checks if boulder has pending work (Sisyphus style).
+   */
+  hasPendingWork(): boolean {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder || boulder.status !== 'active') {
+      return false;
+    }
+
+    // Check pending plan items
+    if (boulder.activePlan) {
+      const pending = boulder.activePlan.filter(
+        item => item.status === 'pending' || item.status === 'in_progress'
+      );
+      if (pending.length > 0) {
+        return true;
+      }
+    }
+
+    // Check if not in completion phase
+    if (boulder.currentPhase !== 'completion') {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Gets idle duration in milliseconds (Sisyphus style).
+   */
+  getIdleDurationMs(): number {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (!boulder || !boulder.lastActivityAt) {
+      return 0;
+    }
+
+    return Date.now() - new Date(boulder.lastActivityAt).getTime();
+  }
+
+  /**
+   * Saves session context for recovery (Sisyphus style).
+   */
+  saveSessionContext(context: string): void {
+    const boulder = readBoulderState(this.directory, this.config);
+    if (boulder) {
+      boulder.sessionContext = context;
+      writeBoulderState(this.directory, boulder, this.config);
+    }
+  }
+
+  /**
+   * Gets session context (Sisyphus style).
+   */
+  getSessionContext(): string | undefined {
+    const boulder = readBoulderState(this.directory, this.config);
+    return boulder?.sessionContext;
   }
 }
 

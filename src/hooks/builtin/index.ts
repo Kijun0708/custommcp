@@ -28,9 +28,14 @@ export {
   registerTodoContinuationEnforcerHooks,
   getEnforcerStats,
   resetEnforcerState,
-  markItemComplete,
-  clearIncompleteItems,
-  updateEnforcerConfig
+  updateEnforcerConfig,
+  addTodo,
+  updateTodoStatus,
+  clearTodos,
+  getTrackedTodos,
+  setContinuationCallback,
+  setRecoveryMode,
+  checkIdle
 } from './todo-continuation-enforcer.js';
 export {
   registerSessionRecoveryHooks,

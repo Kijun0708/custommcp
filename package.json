@@ -4,6 +4,10 @@
   "description": "MCP server for multi-LLM collaboration via CLIProxyAPI",
   "main": "dist/index.js",
   "type": "module",
+  "bin": {
+    "custommcp": "./dist/cli/index.js",
+    "llm-router-mcp": "./dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

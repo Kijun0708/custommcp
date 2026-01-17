@@ -24,7 +24,10 @@ export type HookEventType =
   | 'onRalphLoopIteration' // Ralph Loop 반복
   | 'onRalphLoopEnd'       // Ralph Loop 종료
   | 'onError'              // 에러 발생 시
-  | 'onRateLimit';         // Rate limit 발생 시
+  | 'onRateLimit'          // Rate limit 발생 시
+  | 'onSessionIdle'        // 세션 유휴 감지 (Sisyphus)
+  | 'onAssistantResponse'  // Assistant 응답 생성 시
+  | 'onBoulderContinuation'; // Boulder 연속 실행 시
 
 /**
  * Hook execution decision.
@@ -275,6 +278,66 @@ export interface OnRateLimitContext extends HookBaseContext {
 }
 
 /**
+ * Context for onSessionIdle hook (Sisyphus).
+ */
+export interface OnSessionIdleContext extends HookBaseContext {
+  eventType: 'onSessionIdle';
+  /** Time since last activity in ms */
+  idleDurationMs: number;
+  /** Number of pending TODO items */
+  pendingTodoCount: number;
+  /** TODO items that are pending */
+  pendingTodos: Array<{
+    content: string;
+    status: 'pending' | 'in_progress';
+  }>;
+  /** Whether there's an active boulder */
+  hasActiveBoulder: boolean;
+  /** Current boulder ID if any */
+  boulderId?: string;
+  /** Whether recovery is in progress */
+  isRecovering: boolean;
+  /** Whether background tasks are running */
+  hasBackgroundTasks: boolean;
+}
+
+/**
+ * Context for onAssistantResponse hook.
+ */
+export interface OnAssistantResponseContext extends HookBaseContext {
+  eventType: 'onAssistantResponse';
+  /** The response content */
+  response: string;
+  /** Whether response contains code modifications */
+  hasCodeModifications: boolean;
+  /** Files that were modified */
+  modifiedFiles: string[];
+  /** Whether response indicates task completion */
+  indicatesCompletion: boolean;
+  /** Whether response contains delegation */
+  containsDelegation: boolean;
+}
+
+/**
+ * Context for onBoulderContinuation hook.
+ */
+export interface OnBoulderContinuationContext extends HookBaseContext {
+  eventType: 'onBoulderContinuation';
+  /** Boulder ID */
+  boulderId: string;
+  /** Current phase */
+  currentPhase: string;
+  /** Remaining tasks count */
+  remainingTasksCount: number;
+  /** Time elapsed since boulder started in ms */
+  elapsedTimeMs: number;
+  /** Number of attempts made */
+  attemptsMade: number;
+  /** Max attempts allowed */
+  maxAttempts: number;
+}
+
+/**
  * Union type of all hook contexts.
  */
 export type HookContext =
@@ -291,7 +354,10 @@ export type HookContext =
   | OnRalphLoopIterationContext
   | OnRalphLoopEndContext
   | OnErrorContext
-  | OnRateLimitContext;
+  | OnRateLimitContext
+  | OnSessionIdleContext
+  | OnAssistantResponseContext
+  | OnBoulderContinuationContext;
 
 /**
  * Hook result returned by hook handlers.

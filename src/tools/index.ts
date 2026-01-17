@@ -138,3 +138,23 @@ export {
   playwrightActionTool, playwrightActionSchema, handlePlaywrightAction,
   playwrightPdfTool, playwrightPdfSchema, handlePlaywrightPdf
 } from './playwright.js';
+
+// Agent & Command Tools
+export {
+  listAgentsTool, listAgentsSchema, handleListAgents,
+  runAgentTool, runAgentSchema, handleRunAgent,
+  listCommandsTool, listCommandsSchema, handleListCommands,
+  runCommandTool, runCommandSchema, handleRunCommand,
+  searchCommandsTool, searchCommandsSchema, handleSearchCommands
+} from './agent-command.js';
+
+// TODO Manager Tools
+export {
+  todoAddTool, todoAddSchema, handleTodoAdd,
+  todoUpdateTool, todoUpdateSchema, handleTodoUpdate,
+  todoCompleteTool, todoCompleteSchema, handleTodoComplete,
+  todoListTool, todoListSchema, handleTodoList,
+  todoRemindTool, todoRemindSchema, handleTodoRemind,
+  todoClearTool, todoClearSchema, handleTodoClear,
+  getTodoStats, resetTodoState
+} from './todo-manager.js';
