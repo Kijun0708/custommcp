@@ -292,7 +292,8 @@ const DEFAULT_CONFIG: MagicKeywordsConfig = {
   enabled: true,
   injectContext: true,
   showActivation: true,
-  enabledKeywords: ['ultrawork', 'search', 'analyze', 'deepdive', 'quickfix', 'refactor', 'review', 'document']
+  // ultrawork 비활성화: Sisyphus Mode 무한 루프 문제로 인해 제외
+  enabledKeywords: ['search', 'analyze', 'deepdive', 'quickfix', 'refactor', 'review', 'document']
 };
 
 let config: MagicKeywordsConfig = { ...DEFAULT_CONFIG };

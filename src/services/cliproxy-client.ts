@@ -9,6 +9,24 @@ import { getCached, setCache } from '../utils/cache.js';
 import { isRateLimitError, parseRetryAfter, markRateLimited, isCurrentlyLimited } from '../utils/rate-limit.js';
 import { withRetry } from '../utils/retry.js';
 
+// 모델별 타임아웃 설정 (ms)
+// GPT: deep thinking으로 오래 걸림, Claude: 중간, Gemini: 빠름
+function getModelTimeout(model: string): number {
+  if (model.includes('gpt-5') || model.includes('codex')) {
+    return 300000;  // 5분 - GPT 5.x는 deep thinking으로 오래 걸림
+  }
+  if (model.includes('claude') && model.includes('opus')) {
+    return 180000;  // 3분 - Opus도 deep thinking
+  }
+  if (model.includes('claude')) {
+    return 120000;  // 2분 - Sonnet/Haiku
+  }
+  if (model.includes('gemini')) {
+    return 90000;   // 1.5분 - Gemini
+  }
+  return 60000;     // 기본 1분
+}
+
 interface ChatRequest {
   model: string;
   messages: Array<{ role: string; content: MessageContent | null; tool_calls?: ToolCall[]; tool_call_id?: string }>;
@@ -191,7 +209,8 @@ export async function callExpert(
     request.tool_choice = toolChoice || "auto";
   }
 
-  expertLogger.debug({ model: expert.model }, 'Calling CLIProxyAPI');
+  const timeoutMs = getModelTimeout(expert.model);
+  expertLogger.debug({ model: expert.model, timeoutMs }, 'Calling CLIProxyAPI');
 
   // 4. API 호출 (재시도 로직 포함)
   const response = await withRetry(
@@ -200,7 +219,7 @@ export async function callExpert(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(60000)  // 60초 타임아웃
+        signal: AbortSignal.timeout(timeoutMs)
       });
 
       // Rate Limit 체크
