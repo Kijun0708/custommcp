@@ -15,6 +15,9 @@ LLM Router MCP는 [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode) �
 - **11개 AI 전문가**: GPT, Claude, Gemini를 역할별로 활용
 - **129개 MCP 도구**: 코드 분석, 웹 검색, Git, 브라우저 자동화 등
 - **38개+ 내장 훅**: Sisyphus 패턴, Think Mode, 자동 복구 등
+- **10개 내장 스킬**: 코드 리뷰, 보안 감사, 심층 분석 등 전문가 자동 라우팅
+- **HUD Statusline**: 실시간 비용, 컨텍스트, 전문가 활동 모니터링
+- **Worker Preamble**: 오케스트레이션 시 sub-agent 재귀 방지
 - **Sisyphus 오케스트레이션**: 작업 완료까지 자동 계속 진행
 - **자동 폴백**: Rate limit 발생 시 자동으로 다른 전문가로 전환
 
@@ -130,6 +133,75 @@ oh-my-opencode 스타일의 **작업 완료 강제 메커니즘**:
 - **검증 리마인더**: 서브에이전트가 "완료" 주장 시 검증 체크리스트 표시
 - **자동 계속**: 세션 유휴 상태에서 미완료 작업 감지 시 자동 프롬프트 주입
 - **볼더 상태**: 작업 진행 상태 추적 및 복구
+
+### HUD Statusline (실시간 모니터링)
+
+MCP 서버 상태를 실시간으로 모니터링:
+
+```
+🤖 GPT:2 Claude:1 Gemini:3 | 💰 $0.42 | 📊 ctx:45% | ⏳ bg:2
+```
+
+#### 설정 (최초 1회)
+
+```bash
+# Claude Code statusline에 등록
+node scripts/setup-statusline.js --preset standard
+
+# 프리셋 옵션
+node scripts/setup-statusline.js --preset minimal   # 비용 + 호출수만
+node scripts/setup-statusline.js --preset full       # 모든 메트릭
+
+# 제거
+node scripts/setup-statusline.js --remove
+```
+
+#### 표시 정보
+
+| 프리셋 | 표시 내용 |
+|--------|----------|
+| `minimal` | 비용, 총 호출 수 |
+| `standard` | 프로바이더별 호출, 비용, 컨텍스트 %, 백그라운드 태스크 |
+| `full` | 전체 메트릭 + 캐시 히트율, Rate limit, 에러 수 |
+
+> **참고**: HUD는 CLI 터미널 기반이며, VSCode 확장에서는 `node dist/cli/hud.js --preset standard`로 수동 확인 가능
+
+### 내장 스킬 시스템
+
+10개의 내장 스킬이 적합한 전문가에게 자동 라우팅:
+
+| 스킬 | 전문가 | 용도 |
+|------|--------|------|
+| `deep-analyze` | strategist | 아키텍처/시스템 심층 분석 |
+| `quick-search` | explorer | 빠른 파일/패턴 검색 |
+| `code-review` | reviewer | 코드 리뷰 및 품질 분석 |
+| `security-audit` | reviewer | 보안 취약점 감사 |
+| `doc-writer` | writer | 기술 문서 작성 |
+| `api-explore` | researcher | API/라이브러리 탐색 |
+| `ui-design` | frontend | UI/UX 설계 |
+| `git-workflow` | strategist | Git 전략 관리 |
+| `test-runner` | researcher | 테스트 실행/분석 |
+| `ensemble-debate` | (멀티) | 다중 전문가 토론 |
+
+```
+"skill_execute deep-analyze '마이크로서비스 아키텍처 분석'"
+→ strategist 전문가가 자동으로 할당되어 분석 수행
+```
+
+커스텀 스킬은 `skills/스킬명/SKILL.md`에 추가:
+
+```markdown
+---
+name: my-skill
+description: 내 커스텀 스킬
+expert: researcher
+argument-hint: "<분석 대상>"
+tags:
+  - custom
+---
+
+스킬 프롬프트 내용...
+```
 
 ### Think Mode (확장 사고)
 
@@ -409,16 +481,30 @@ custommcp/
 │   ├── tools/                # MCP 도구 (129개)
 │   ├── hooks/                # 훅 시스템
 │   │   └── builtin/          # 내장 훅 (38개+)
+│   ├── hud/                  # HUD 상태 관리
+│   │   ├── types.ts          # HUD 타입 정의
+│   │   └── state-writer.ts   # 상태 파일 기록
+│   ├── cli/                  # CLI 도구
+│   │   └── hud.ts            # HUD statusline CLI
 │   ├── features/             # 기능 모듈
 │   │   ├── boulder-state/    # 볼더 상태 관리
 │   │   ├── claude-code-agent-loader/   # 에이전트 로더
 │   │   ├── claude-code-command-loader/ # 명령어 로더
 │   │   ├── skill-system/     # 스킬 시스템
+│   │   ├── ralph-loop/       # Ralph Loop 반복 실행
 │   │   └── mcp-loader/       # MCP 서버 관리
 │   ├── services/             # 핵심 서비스
-│   │   ├── expert-router.ts  # 전문가 라우팅
+│   │   ├── expert-router.ts  # 전문가 라우팅 (+ Worker Preamble)
 │   │   └── cliproxy-client.ts # CLIProxyAPI 클라이언트
-│   └── cli/                  # CLI 도구
+│   └── utils/                # 유틸리티
+│       └── worker-preamble.ts # Worker 제약 프로토콜
+├── skills/                   # 내장 스킬 (10개)
+│   ├── deep-analyze/
+│   ├── code-review/
+│   ├── security-audit/
+│   └── ...
+├── scripts/
+│   └── setup-statusline.js   # HUD statusline 설정
 ├── vendor/
 │   └── cliproxy/             # CLIProxyAPI 바이너리
 └── dist/                     # 빌드 출력
@@ -433,15 +519,16 @@ custommcp/
 | MCP 도구 | 129개 |
 | 내장 훅 | 38개+ |
 | 전문가 | 11개 |
+| 내장 스킬 | 10개 |
 | 기능 모듈 | 15+ |
 
 ---
 
-## oh-my-opencode와의 관계
+## 영감을 받은 프로젝트
 
-이 프로젝트는 [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode)에서 영감을 받았습니다.
+이 프로젝트는 [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode)와 [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode)에서 영감을 받았습니다.
 
-### 동일한 기능
+### 통합된 기능
 - Sisyphus 스타일 작업 완료 강제
 - Think Mode (확장 사고)
 - Agent/Command 로더
@@ -449,15 +536,20 @@ custommcp/
 - TODO Continuation Enforcer
 - Preemptive Compaction
 - Session Recovery
+- HUD Statusline (oh-my-claudecode)
+- SKILL.md 기반 내장 스킬 (oh-my-claudecode)
+- Worker Preamble Protocol (oh-my-claudecode)
 
 ### 차이점
-| 항목 | oh-my-opencode | custommcp |
-|------|----------------|-----------|
-| 아키텍처 | Claude Code 플러그인 | MCP 서버 |
-| 런타임 | Bun | Node.js |
-| 전문가 수 | 7개 | 11개 |
-| 도구 수 | 13개 | 129개 |
-| 세션 제어 | 직접 제어 | MCP 프로토콜 통해 간접 |
+| 항목 | oh-my-opencode | oh-my-claudecode | custommcp |
+|------|----------------|-----------------|-----------|
+| 아키텍처 | Claude Code 플러그인 | Claude Code 플러그인 | MCP 서버 |
+| 런타임 | Bun | TypeScript/Agent SDK | Node.js |
+| LLM | Claude 전용 | Claude 전용 | GPT + Claude + Gemini |
+| 전문가 수 | 7개 | 12개 | 11개 |
+| 도구 수 | 13개 | - | 129개 |
+| 내장 스킬 | - | 12개 | 10개 |
+| 세션 제어 | 직접 제어 | 직접 제어 | MCP 프로토콜 통해 간접 |
 
 ---
 

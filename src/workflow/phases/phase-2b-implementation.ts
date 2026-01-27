@@ -335,7 +335,9 @@ export const phase2bImplementation: PhaseHandler = {
         expertId,
         fullPrompt,
         context.codebaseContext,  // context
-        true  // skipCache
+        true,  // skipCache
+        undefined,  // imagePath
+        true  // applyPreamble - orchestrate 모드에서 Worker 제약 적용
       );
 
       // Track which expert was used

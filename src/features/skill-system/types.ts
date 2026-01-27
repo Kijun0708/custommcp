@@ -43,6 +43,10 @@ export interface SkillDefinition {
   tools?: string[];
   /** Required capabilities */
   requires?: string[];
+  /** Preferred expert ID for this skill */
+  expert?: string;
+  /** Argument hint (what parameters the skill expects) */
+  argumentHint?: string;
 }
 
 /**
@@ -178,6 +182,8 @@ export interface SkillFileFormat {
     version?: string;
     author?: string;
     tags?: string[];
+    expert?: string;
+    argumentHint?: string;
   };
   /** Configuration */
   config?: Record<string, unknown>;

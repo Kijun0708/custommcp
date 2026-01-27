@@ -6,7 +6,8 @@
   "type": "module",
   "bin": {
     "custommcp": "./dist/cli/index.js",
-    "llm-router-mcp": "./dist/cli/index.js"
+    "llm-router-mcp": "./dist/cli/index.js",
+    "custommcp-hud": "./dist/cli/hud.js"
   },
   "scripts": {
     "build": "tsc",

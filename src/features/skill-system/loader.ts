@@ -117,7 +117,9 @@ function parseMarkdownSkill(content: string): SkillFileFormat | null {
         description: frontmatter.description,
         version: frontmatter.version,
         author: frontmatter.author,
-        tags: frontmatter.tags
+        tags: frontmatter.tags,
+        expert: frontmatter.expert || frontmatter['expert-id'],
+        argumentHint: frontmatter['argument-hint'] || frontmatter.argumentHint
       },
       config: frontmatter.config,
       mcp: frontmatter.mcp,
@@ -155,7 +157,9 @@ function toSkillDefinition(
     mcp: format.mcp,
     prompt: format.prompt,
     tools: format.tools,
-    requires: format.requires
+    requires: format.requires,
+    expert: format.skill.expert,
+    argumentHint: format.skill.argumentHint
   };
 }
 
@@ -202,6 +206,8 @@ function loadSkillFile(filePath: string, scope: SkillScope): LoadedSkill | null 
 
 /**
  * Scans directory for skill files
+ * - 직접 파일 (skills/my-skill.md)
+ * - 서브디렉토리의 SKILL.md (skills/my-skill/SKILL.md)
  */
 function scanDirectory(dirPath: string, scope: SkillScope): LoadedSkill[] {
   const skills: LoadedSkill[] = [];
@@ -211,25 +217,27 @@ function scanDirectory(dirPath: string, scope: SkillScope): LoadedSkill[] {
       return skills;
     }
 
-    const files = fs.readdirSync(dirPath);
+    const entries = fs.readdirSync(dirPath);
 
-    for (const file of files) {
-      const ext = path.extname(file).toLowerCase();
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry);
+      const stat = fs.statSync(entryPath);
 
-      if (!config.extensions.includes(ext)) {
-        continue;
-      }
+      if (stat.isFile()) {
+        // 직접 파일 스캔
+        const ext = path.extname(entry).toLowerCase();
+        if (!config.extensions.includes(ext)) continue;
 
-      const filePath = path.join(dirPath, file);
-      const stat = fs.statSync(filePath);
+        const skill = loadSkillFile(entryPath, scope);
+        if (skill) skills.push(skill);
 
-      if (!stat.isFile()) {
-        continue;
-      }
-
-      const skill = loadSkillFile(filePath, scope);
-      if (skill) {
-        skills.push(skill);
+      } else if (stat.isDirectory()) {
+        // 서브디렉토리에서 SKILL.md 찾기
+        const skillMdPath = path.join(entryPath, 'SKILL.md');
+        if (fs.existsSync(skillMdPath)) {
+          const skill = loadSkillFile(skillMdPath, scope);
+          if (skill) skills.push(skill);
+        }
       }
     }
   } catch (error: any) {

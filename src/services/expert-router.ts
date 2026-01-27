@@ -6,13 +6,15 @@ import { callExpert, RateLimitExceededError } from './cliproxy-client.js';
 import { callExpertWithTools } from './expert-with-tools.js';
 import { logger } from '../utils/logger.js';
 import { executeHooks } from '../hooks/index.js';
+import { wrapWithPreamble, hasPreamble } from '../utils/worker-preamble.js';
 
 export async function callExpertWithFallback(
   expertId: string,
   prompt: string,
   context?: string,
   skipCache: boolean = false,
-  imagePath?: string
+  imagePath?: string,
+  applyPreamble: boolean = false
 ): Promise<ExpertResponse> {
   const expert = experts[expertId];
 
@@ -41,8 +43,13 @@ export async function callExpertWithFallback(
     ? (context ? `${context}\n\n${preHookResult.injectMessage}` : preHookResult.injectMessage)
     : context;
 
+  // Worker Preamble 적용 (orchestrate 모드에서만)
+  const finalPrompt = (applyPreamble && !hasPreamble(prompt))
+    ? wrapWithPreamble(prompt)
+    : prompt;
+
   try {
-    const result = await callExpert(expert, prompt, { context: finalContext, skipCache, imagePath });
+    const result = await callExpert(expert, finalPrompt, { context: finalContext, skipCache, imagePath });
     const durationMs = Date.now() - startTime;
 
     // Execute onExpertResult hooks
@@ -87,7 +94,7 @@ export async function callExpertWithFallback(
 
         const fallbackExpert = experts[fallbackId];
         const fallbackStartTime = Date.now();
-        const result = await callExpert(fallbackExpert, prompt, { context: finalContext, skipCache, imagePath });
+        const result = await callExpert(fallbackExpert, finalPrompt, { context: finalContext, skipCache, imagePath });
         const fallbackDurationMs = Date.now() - fallbackStartTime;
 
         logger.info({ fallbackId }, 'Fallback succeeded');
@@ -158,7 +165,8 @@ export async function callExpertWithToolsAndFallback(
   context?: string,
   skipCache: boolean = false,
   enableTools: boolean = true,
-  imagePath?: string
+  imagePath?: string,
+  applyPreamble: boolean = false
 ): Promise<ExpertResponse> {
   const expert = experts[expertId];
 
@@ -187,8 +195,13 @@ export async function callExpertWithToolsAndFallback(
     ? (context ? `${context}\n\n${preHookResult.injectMessage}` : preHookResult.injectMessage)
     : context;
 
+  // Worker Preamble 적용 (orchestrate 모드에서만)
+  const finalPrompt = (applyPreamble && !hasPreamble(prompt))
+    ? wrapWithPreamble(prompt)
+    : prompt;
+
   try {
-    const result = await callExpertWithTools(expert, prompt, {
+    const result = await callExpertWithTools(expert, finalPrompt, {
       context: finalContext,
       skipCache,
       enableTools: enableTools && expert.toolChoice !== "none",
@@ -239,7 +252,7 @@ export async function callExpertWithToolsAndFallback(
 
         const fallbackExpert = experts[fallbackId];
         const fallbackStartTime = Date.now();
-        const result = await callExpertWithTools(fallbackExpert, prompt, {
+        const result = await callExpertWithTools(fallbackExpert, finalPrompt, {
           context: finalContext,
           skipCache,
           enableTools: enableTools && fallbackExpert.toolChoice !== "none",

@@ -69,6 +69,7 @@ export const skillSystem = {
   getByTag: loader.getSkillsByTag,
   enable: loader.enableSkill,
   disable: loader.disableSkill,
+  recordUsage: loader.recordSkillUsage,
   reload: loader.reloadSkills,
   loaderStats: loader.getLoaderStats,
   loaderConfig: loader.getLoaderConfig,

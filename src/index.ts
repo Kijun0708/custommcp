@@ -8,6 +8,7 @@ import { logger } from "./utils/logger.js";
 
 import { ensureCliproxyRunning } from "./utils/cliproxy-launcher.js";
 import { setupHookSystem } from "./hooks/index.js";
+import { initializeHud, shutdownHud } from "./hud/index.js";
 
 // New tool registrations
 import { registerInteractiveBashTools } from "./tools/interactive-bash.js";
@@ -894,6 +895,9 @@ async function main() {
   // Hook 시스템 초기화
   setupHookSystem();
 
+  // HUD 상태 표시 시스템 초기화
+  initializeHud();
+
   // CLIProxyAPI 자동 시작
   await ensureCliproxyRunning();
 
@@ -905,6 +909,11 @@ async function main() {
   await server.connect(transport);
 
   logger.info('Server connected via stdio');
+
+  // 프로세스 종료 시 HUD 정리
+  process.on('exit', () => shutdownHud());
+  process.on('SIGINT', () => { shutdownHud(); process.exit(0); });
+  process.on('SIGTERM', () => { shutdownHud(); process.exit(0); });
 }
 
 // 실행

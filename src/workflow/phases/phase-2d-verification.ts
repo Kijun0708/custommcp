@@ -216,7 +216,9 @@ export const phase2dVerification: PhaseHandler = {
         'reviewer',
         verificationPrompt,
         context.codebaseContext,
-        true  // skipCache
+        true,  // skipCache
+        undefined,  // imagePath
+        true  // applyPreamble - orchestrate 모드에서 Worker 제약 적용
       );
 
       // Parse result

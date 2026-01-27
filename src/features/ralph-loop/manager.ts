@@ -139,7 +139,9 @@ async function executeIteration(
       expert,
       prompt,
       undefined,
-      true // skipCache - always get fresh response
+      true, // skipCache - always get fresh response
+      undefined,  // imagePath
+      true  // applyPreamble - Ralph Loop에서 Worker 제약 적용
     );
 
     const output = response.response;

@@ -251,6 +251,13 @@ export {
   validateMarkdown
 } from './prometheus-md-only.js';
 
+// Phase 5: HUD Hooks
+export {
+  registerHudStateUpdaterHooks,
+  getHudStats,
+  hudStateUpdaterHooks
+} from './hud-state-updater.js';
+
 import { registerLoggingHooks } from './logging.js';
 import { registerContextInjectorHooks } from './context-injector.js';
 import { registerRateLimitHooks } from './rate-limit-handler.js';
@@ -291,6 +298,7 @@ import { registerAutoUpdateCheckerHooks } from './auto-update-checker.js';
 import { registerTaskToastManagerHooks } from './task-toast-manager.js';
 import { registerHookMessageInjectorHooks } from './hook-message-injector.js';
 import { registerPrometheusMdOnlyHooks } from './prometheus-md-only.js';
+import { registerHudStateUpdaterHooks } from './hud-state-updater.js';
 import { getHookManager } from '../manager.js';
 
 /**
@@ -355,6 +363,9 @@ export function registerAllBuiltinHooks(): void {
   registerTaskToastManagerHooks();
   registerHookMessageInjectorHooks();
   registerPrometheusMdOnlyHooks();
+
+  // Phase 5: HUD State Updater Hooks
+  registerHudStateUpdaterHooks();
 
   // Cost Tracking Hook (low priority, runs after others)
   const hookManager = getHookManager();

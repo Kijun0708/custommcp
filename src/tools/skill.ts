@@ -15,6 +15,8 @@ import {
   LoadedSkill,
   SkillExecutionContext
 } from '../features/skill-system/index.js';
+import { callExpertWithFallback } from '../services/expert-router.js';
+import { getHudStateWriter } from '../hud/index.js';
 
 /**
  * Formats skill info for display
@@ -36,6 +38,14 @@ function formatSkillInfo(skill: LoadedSkill): string {
 
   if (skill.author) {
     info += `**Author:** ${skill.author}\n`;
+  }
+
+  if (skill.expert) {
+    info += `**Expert:** \`${skill.expert}\`\n`;
+  }
+
+  if (skill.argumentHint) {
+    info += `**Arguments:** ${skill.argumentHint}\n`;
   }
 
   if (skill.tags && skill.tags.length > 0) {
@@ -233,6 +243,43 @@ export function registerSkillTools(server: McpServer): void {
           };
         }
 
+        // HUD에 스킬 사용 기록
+        try { getHudStateWriter().recordSkillUsage(skill.name); } catch {}
+
+        // Expert 자동 라우팅: skill에 expert 필드가 있으면 해당 전문가에게 위임
+        if (skill.expert && skill.prompt) {
+          const startTime = Date.now();
+          const expertPrompt = `${skill.prompt}\n\n---\n\n## 사용자 요청\n\n${input}`;
+
+          logger.info({
+            skillId: skill.id,
+            expert: skill.expert,
+            inputLength: input.length
+          }, 'Routing skill to expert');
+
+          const expertResult = await callExpertWithFallback(
+            skill.expert,
+            expertPrompt,
+            context ? JSON.stringify(context) : undefined
+          );
+
+          const duration = Date.now() - startTime;
+          skillSystem.recordUsage(skill.id);
+
+          let response = `✅ **Skill: ${skill.name}** → Expert: \`${expertResult.actualExpert}\`\n\n`;
+          response += `**Duration:** ${duration}ms`;
+          if (expertResult.fellBack) {
+            response += ` (fallback from ${skill.expert})`;
+          }
+          response += '\n\n';
+          response += expertResult.response;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        }
+
+        // 기본 실행 경로 (expert 미지정 시)
         const execContext: SkillExecutionContext = {
           cwd: process.cwd(),
           env: process.env as Record<string, string>,
